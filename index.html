@@ -1,0 +1,76 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍄 우리반 교실</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-title">🍄 우리반 교실</div>
+  <div class="toolbar-btns">
+    <button class="btn green" id="settingBtn">👥 학생 설정</button>
+    <button class="btn" id="bulkScoreBtn">✏️ 일괄 점수 입력</button>
+    <button class="btn" id="shuffleBtn">🔀 랜덤 자리바꾸기</button>
+    <button class="btn red" id="resetScoreBtn">🔄 점수 초기화</button>
+  </div>
+</div>
+
+<div id="canvas"><div id="canvasInner"></div></div>
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="settingModal" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-title">👥 학생 이름 설정</div>
+    <div class="modal-desc">학생 이름을 한 줄에 하나씩 입력해주세요. (21명)<br>저장하면 자동으로 6모둠으로 나눕니다.</div>
+    <textarea id="studentInput" placeholder="김민수&#10;박지영&#10;이준혁&#10;..."></textarea>
+    <div class="modal-btns">
+      <button class="btn blue" id="cancelSettingBtn">취소</button>
+      <button class="btn" id="saveSettingBtn">💾 저장하기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="memoModal" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-title" id="memoModalTitle">📝 학생 메모</div>
+    <div class="modal-desc">점수를 올리거나 내릴 때 사유를 함께 기록할 수 있어요. (사유만 남기려면 점수는 0으로 두세요)</div>
+    <div class="memo-history-list" id="memoHistoryList"></div>
+    <div class="memo-input-row">
+      <input type="number" id="memoDelta" placeholder="점수(+5, -3 등)" value="0">
+      <input type="text" id="memoReason" placeholder="사유 입력 (예: 배움공책 기록)">
+    </div>
+    <div class="modal-btns">
+      <button class="btn blue" id="cancelMemoBtn">닫기</button>
+      <button class="btn" id="saveMemoBtn">➕ 기록 추가</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="bulkModal" style="display:none;">
+  <div class="modal-box wide">
+    <div class="modal-title">✏️ 일괄 점수 입력</div>
+    <div class="modal-desc">점수를 변경할 학생을 선택하고, 점수와 사유를 입력한 뒤 적용하세요.</div>
+    <div class="bulk-select-all">
+      <button class="btn blue" type="button" id="bulkSelectAllBtn">전체 선택</button>
+      <button class="btn" type="button" id="bulkSelectNoneBtn">전체 해제</button>
+    </div>
+    <div class="bulk-student-list" id="bulkStudentList"></div>
+    <div class="memo-input-row">
+      <input type="number" id="bulkDelta" placeholder="점수(+5, -3 등)" value="0">
+      <input type="text" id="bulkReason" placeholder="사유 입력 (예: 배움공책 기록)">
+    </div>
+    <div class="modal-btns">
+      <button class="btn blue" id="cancelBulkBtn">취소</button>
+      <button class="btn" id="applyBulkBtn">✅ 적용하기</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/items.js"></script>
+<script src="index.js"></script>
+</body>
+</html>
