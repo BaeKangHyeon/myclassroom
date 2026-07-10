@@ -163,13 +163,6 @@
     gap: 8px;
     margin-bottom: 10px;
   }
-  /* 모둠4 전용: 2+2+1 배치 */
-  .desks-grid-221 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
   .desk-solo {
     grid-column: 1 / -1;
     width: calc(50% - 4px);
@@ -635,3 +628,61 @@
   .bulk-group-label:first-child { margin-top: 0; }
   .bulk-student-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--navy); }
   .bulk-student-item input { width: 16px; height: 16px; }
+  .onboarding-overlay { z-index: 5000; }
+  .onboarding-inputs { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+  .onboarding-inputs label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5C3A1E; font-weight: 700; }
+  .onboarding-inputs input[type="number"] {
+    width: 90px;
+    border: 2px solid var(--desk-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--desk-bg);
+    color: var(--navy);
+  }
+  .onboarding-inputs input:focus { outline: 2px solid var(--orange); }
+  .onboarding-group-list {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 2px solid var(--desk-border);
+    border-radius: 8px;
+    background: var(--desk-bg);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .onboarding-group-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--navy); }
+  .onboarding-group-row span.gname { min-width: 60px; font-weight: 700; }
+  .onboarding-group-row input[type="number"] {
+    width: 70px;
+    border: 2px solid var(--desk-border);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 13px;
+    font-family: inherit;
+    background: white;
+    color: var(--navy);
+  }
+  .onboarding-group-row .gremove {
+    background: none; border: none; color: #B0704A; font-size: 13px; cursor: pointer;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .onboarding-group-row .gremove:hover { background: rgba(196,122,58,0.15); color: #E53935; }
+  select#rosterAddGroup {
+    border: 2px solid var(--desk-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--desk-bg);
+    color: var(--navy);
+  }
+  .roster-remove-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; color: var(--navy); }
+  .roster-remove-item .rremove {
+    background: none; border: none; color: #B0704A; font-size: 13px; cursor: pointer;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .roster-remove-item .rremove:hover { background: rgba(196,122,58,0.15); color: #E53935; }

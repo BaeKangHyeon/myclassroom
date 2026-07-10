@@ -13,9 +13,11 @@
   <div class="toolbar-title">🍄 우리반 교실</div>
   <div class="toolbar-btns">
     <button class="btn green" id="settingBtn">👥 학생 설정</button>
+    <button class="btn green" id="rosterBtn">🧑‍🤝‍🧑 학생 추가/삭제</button>
     <button class="btn" id="bulkScoreBtn">✏️ 일괄 점수 입력</button>
     <button class="btn" id="shuffleBtn">🔀 랜덤 자리바꾸기</button>
     <button class="btn red" id="resetScoreBtn">🔄 점수 초기화</button>
+    <button class="btn red" id="newSemesterBtn">🆕 학급 초기화</button>
   </div>
 </div>
 
@@ -25,11 +27,50 @@
 <div class="modal-overlay" id="settingModal" style="display:none;">
   <div class="modal-box">
     <div class="modal-title">👥 학생 이름 설정</div>
-    <div class="modal-desc">학생 이름을 한 줄에 하나씩 입력해주세요. (21명)<br>저장하면 자동으로 6모둠으로 나눕니다.</div>
+    <div class="modal-desc" id="settingModalDesc">학생 이름을 한 줄에 하나씩 입력해주세요.</div>
     <textarea id="studentInput" placeholder="김민수&#10;박지영&#10;이준혁&#10;..."></textarea>
     <div class="modal-btns">
       <button class="btn blue" id="cancelSettingBtn">취소</button>
       <button class="btn" id="saveSettingBtn">💾 저장하기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="rosterModal" style="display:none;">
+  <div class="modal-box wide">
+    <div class="modal-title">🧑‍🤝‍🧑 학생 추가 / 삭제</div>
+    <div class="modal-desc">학기 중 전학생이 왔거나 나갔을 때 사용하세요. 다른 학생들의 점수/기록은 그대로 유지됩니다.</div>
+
+    <div class="modal-title" style="font-size:14px;margin-bottom:8px;">➕ 학생 추가</div>
+    <div class="memo-input-row">
+      <select id="rosterAddGroup"></select>
+      <input type="text" id="rosterAddName" placeholder="학생 이름">
+      <button class="btn" id="rosterAddBtn" type="button">추가</button>
+    </div>
+
+    <div class="modal-title" style="font-size:14px;margin-bottom:8px;">➖ 학생 삭제</div>
+    <div class="bulk-student-list" id="rosterRemoveList"></div>
+
+    <div class="modal-btns">
+      <button class="btn blue" id="closeRosterBtn">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay onboarding-overlay" id="onboardingModal" style="display:none;">
+  <div class="modal-box wide">
+    <div class="modal-title">🏫 교실 설정</div>
+    <div class="modal-desc">처음 시작하시는군요! 우리 반 자리를 만들어볼게요.<br>전체 학생 수와 모둠당 인원수를 입력하면 자동으로 모둠을 나눠드려요.</div>
+    <div class="onboarding-inputs">
+      <label>전체 학생 수<input type="number" id="onbTotal" min="1" value="21"></label>
+      <label>모둠당 인원수<input type="number" id="onbPerGroup" min="1" value="4"></label>
+      <button class="btn blue" type="button" id="onbCalcBtn">🔄 모둠 자동 계산</button>
+    </div>
+    <div class="modal-desc">모둠별 인원수는 아래에서 직접 조정할 수 있어요.</div>
+    <div class="onboarding-group-list" id="onbGroupList"></div>
+    <button class="btn blue" type="button" id="onbAddGroupBtn">➕ 모둠 추가</button>
+    <div class="modal-btns" style="margin-top:14px;">
+      <button class="btn" id="onbStartBtn">🚀 시작하기</button>
     </div>
   </div>
 </div>

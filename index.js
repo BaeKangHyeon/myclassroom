@@ -1,58 +1,84 @@
 const STORAGE_KEY = 'maple_classroom_v4';
-const GROUP_COUNT = 5;
-const DEFAULT_STUDENTS = [
-  '학생1','학생2','학생3','학생4','학생5','학생6','학생7',
-  '학생8','학생9','학생10','학생11','학생12','학생13','학생14',
-  '학생15','학생16','학생17','학생18','학생19','학생20','학생21'
-];
 
-// 상단 가운데 빈자리(모둠1-모둠4 사이)에 들어갈 할 일 메모판 크기/위치. buildGroups()의 격자 계산과 맞춰둔 값.
+// 상단 가운데 빈자리(모둠1-모둠4 사이)에 들어갈 할 일 메모판 크기/위치. computeLayout()의 격자 계산과 맞춰둔 값.
 const TODO_W = 660, TODO_H = 469;
 const TODO_DEFAULT_POS = { x: 635, y: 16 };
 
-let state = loadState();
-saveState();
+let onbSizes = [];
+let currentScale = 1;
+const MIN_SCALE = 0.3; // 학생 수가 아주 많을 때만 작동하는 최소 안전장치, 평소엔 아래 자동맞춤 계산이 이보다 항상 큼
 
-function defaultState() {
-  const students = [...DEFAULT_STUDENTS];
-  const groups = buildGroups(students);
+let state = loadState();
+if (state) {
+  saveState();
+  render();
+} else {
+  showOnboarding();
+}
+
+// groupSizes: 모둠별 인원수 배열, 예 [4,4,4,4,4,3]
+function defaultState(groupSizes) {
+  const total = groupSizes.reduce((a,b)=>a+b, 0);
+  const students = [];
+  for (let i = 1; i <= total; i++) students.push(`학생${i}`);
+  const groups = buildGroups(students, groupSizes);
   const scores = {};
+  const currency = {};
   const spent = {};
   const history = {};
   const avatars = {};
-  students.forEach((_, i) => { scores[i] = 0; spent[i] = 0; history[i] = []; avatars[i] = defaultAvatar(); });
-  return { students, groups, scores, spent, history, avatars, todoNote: '', todoPos: { ...TODO_DEFAULT_POS } };
+  students.forEach((_, i) => { scores[i] = 0; currency[i] = 0; spent[i] = 0; history[i] = []; avatars[i] = defaultAvatar(); });
+  const todoPos = computeLayout(groupSizes).todoPos;
+  return { students, groups, scores, currency, spent, history, avatars, config: { groupSizes: [...groupSizes] }, todoNote: '', todoPos };
 }
 
-function buildGroups(students) {
-  // 배치: [모둠1][빈자리][모둠4] / [모둠2][모둠3][모둠5]
-  // 모둠1,2,4,5: 4명 / 모둠3: 5명
-  const cardW = 595, cardH = 425, gapX = 20, gapY = 24, ox = 20, oy = 16;
+// 모둠 카드들을 3열로 자동 줄바꿈 배치. 인원이 많아 desks-grid 줄이 늘어난 모둠은 카드 실제 높이도 커지므로,
+// 각 행의 높이를 그 행에서 가장 인원이 많은 모둠 기준으로 계산해 아래 행과 겹치지 않게 한다.
+// (실측: desk-card 2줄=421px, 3줄=579px → 줄당 158px, 헤더/푸터/여백 고정 105px)
+const DESK_ROW_H = 158, CARD_BASE_H = 105;
+function estimateCardHeight(size) {
+  const deskRows = Math.max(1, Math.ceil(size / 2));
+  return CARD_BASE_H + DESK_ROW_H * deskRows;
+}
 
-  // 상단 가운데(할 일 메모판) 폭/높이가 모둠 카드보다 커서, 그만큼 오른쪽 열과 아랫줄을 밀어서 안 겹치게 계산
-  const col2X = ox + (cardW+gapX) + (TODO_W+gapX);
-  const row1Y = oy + Math.max(cardH, TODO_H) + gapY;
+function computeLayout(groupSizes) {
+  const cardW = 595, gapX = 20, gapY = 24, ox = 20, oy = 16, cols = 3;
+  const n = groupSizes.length;
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const lastRow = rows - 1;
+  const lastRowUsed = n - lastRow * cols; // 마지막 줄에 실제로 들어간 모둠 수(1~cols)
 
-  // 각 모둠 화면 위치 (가운데 상단은 빈자리라 col=1 상단은 없음)
-  const positions = [
-    { x: ox + 0*(cardW+gapX), y: oy }, // 모둠1: 상단 왼쪽
-    { x: ox + 0*(cardW+gapX), y: row1Y }, // 모둠2: 하단 왼쪽
-    { x: ox + (cardW+gapX), y: row1Y }, // 모둠3: 하단 가운데 (5명)
-    { x: col2X, y: oy }, // 모둠4: 상단 오른쪽
-    { x: col2X, y: row1Y }  // 모둠5: 하단 오른쪽
-  ];
+  const rowHeights = new Array(rows).fill(0);
+  for (let i = 0; i < n; i++) {
+    const row = Math.floor(i / cols);
+    rowHeights[row] = Math.max(rowHeights[row], estimateCardHeight(groupSizes[i]));
+  }
+  // 할 일 메모판: 마지막 줄에 빈 칸이 있으면 그 자리를 채우고(기존 디자인처럼 새 줄/새 칸을 안 만듦),
+  // 마지막 줄이 꽉 차 있을 때만 그 줄 오른쪽에 한 칸 이어붙인다(새 줄은 절대 만들지 않는다).
+  const todoRow = lastRow;
+  rowHeights[todoRow] = Math.max(rowHeights[todoRow], TODO_H);
 
-  // 멤버 배분: 모둠1,2,4,5 = 4명씩, 모둠3 = 5명 (총 21명)
-  const sizes = [4, 4, 5, 4, 4];
+  const rowY = [oy];
+  for (let r = 1; r < rows; r++) rowY.push(rowY[r-1] + rowHeights[r-1] + gapY);
+
+  const cellPos = (i) => ({ x: ox + (i % cols) * (cardW+gapX), y: rowY[Math.floor(i / cols)] });
+  const positions = [];
+  for (let g = 0; g < n; g++) positions.push(cellPos(g));
+  const todoPos = { x: ox + (lastRowUsed) * (cardW+gapX), y: rowY[todoRow] };
+  return { positions, todoPos };
+}
+
+function buildGroups(students, groupSizes) {
+  const { positions } = computeLayout(groupSizes);
   const groups = [];
   let cursor = 0;
 
-  for (let g = 0; g < GROUP_COUNT; g++) {
+  for (let g = 0; g < groupSizes.length; g++) {
     const members = [];
-    for (let i = cursor; i < cursor + sizes[g] && i < students.length; i++) {
+    for (let i = cursor; i < cursor + groupSizes[g] && i < students.length; i++) {
       members.push(i);
     }
-    cursor += sizes[g];
+    cursor += groupSizes[g];
     groups.push({
       id: g+1,
       name: `모둠 ${g+1}`,
@@ -71,17 +97,20 @@ function loadState() {
       if (!parsed.history) parsed.history = {};
       if (!parsed.avatars) parsed.avatars = {};
       if (!parsed.spent) parsed.spent = {};
+      if (!parsed.currency) parsed.currency = {};
       if (parsed.todoNote === undefined) parsed.todoNote = '';
       if (!parsed.todoPos) parsed.todoPos = { ...TODO_DEFAULT_POS };
       parsed.students.forEach((_, i) => {
         if (!parsed.history[i]) parsed.history[i] = [];
         if (!parsed.avatars[i]) parsed.avatars[i] = defaultAvatar();
         if (parsed.spent[i] === undefined) parsed.spent[i] = 0;
+        // 기존 저장 데이터엔 재화(currency) 필드가 없었으므로, 지금까지 쌓인 점수를 초기 재화로 이어받는다.
+        if (parsed.currency[i] === undefined) parsed.currency[i] = parsed.scores[i] || 0;
       });
       return parsed;
     }
   } catch(e) {}
-  return defaultState();
+  return null;
 }
 
 function saveState() {
@@ -106,16 +135,16 @@ function render() {
     card.appendChild(header);
 
     const grid = document.createElement('div');
-    // 5명인 모둠은 2+2+1 배치 → 2열 그리드, 마지막 1명은 가운데 정렬
-    const isFiveDesk = group.members.length === 5;
-    grid.className = isFiveDesk ? 'desks-grid desks-grid-221' : 'desks-grid';
+    // 인원이 홀수인 모둠은 마지막 1명이 남으므로 가운데 정렬(desk-solo)한다.
+    const isOddGroup = group.members.length % 2 === 1;
+    grid.className = 'desks-grid';
 
     group.members.forEach((studentIdx, mi) => {
       const name = state.students[studentIdx] || '?';
       const score = state.scores[studentIdx] || 0;
       const desk = document.createElement('div');
-      // 5번째 학생(index 4)은 가운데 정렬용 클래스 추가
-      desk.className = (isFiveDesk && mi === 4) ? 'desk-card desk-solo' : 'desk-card';
+      const isLast = mi === group.members.length - 1;
+      desk.className = (isOddGroup && isLast) ? 'desk-card desk-solo' : 'desk-card';
       desk.dataset.studentIdx = studentIdx;
       desk.dataset.groupId = group.id;
       desk.draggable = true;
@@ -188,8 +217,6 @@ function render() {
 }
 
 // 그룹 카드 전체가 화면 한 눈에 들어오도록 자동으로 축소 비율을 계산해 적용한다.
-let currentScale = 1;
-const MIN_SCALE = 0.5;
 function fitCanvasToScreen() {
   const canvas = document.getElementById('canvas');
   const canvasInner = document.getElementById('canvasInner');
@@ -208,15 +235,17 @@ function fitCanvasToScreen() {
 
   const availW = canvas.clientWidth;
   const availH = canvas.clientHeight;
-  let scale = Math.min(availW / contentW, availH / contentH, 1);
+  // 화면에 딱 맞춘 배율보다 살짝(3%) 더 줄여서, 여백 계산 오차 등으로 스크롤이 생기는 걸 방지한다.
+  let scale = Math.min(availW / contentW, availH / contentH, 1) * 0.97;
   scale = Math.max(scale, MIN_SCALE);
   currentScale = scale;
   canvasInner.style.transform = `scale(${scale})`;
 
   // CSS transform은 스크롤 가능 영역 계산에 반영되지 않아, 실제로는 다 들어와도
-  // 축소 전 크기 기준으로 스크롤바가 남는다. 정상적으로 다 들어오면 스크롤을 숨기고,
-  // 최소 배율로도 화면이 부족한 경우에만(아주 많은 학생 수 등) 스크롤을 허용한다.
-  canvas.style.overflow = (scale <= MIN_SCALE) ? 'auto' : 'hidden';
+  // 축소 전 크기 기준으로 스크롤바가 남는다. 실제로 화면에 다 들어오는지를 직접 계산해서,
+  // 다 들어오면 스크롤을 숨기고 학생 수가 아주 많아 최소 배율로도 부족할 때만 스크롤을 허용한다.
+  const fits = (contentW * scale <= availW + 1) && (contentH * scale <= availH + 1);
+  canvas.style.overflow = fits ? 'hidden' : 'auto';
 }
 
 let fitResizeTimer;
@@ -380,7 +409,10 @@ function applyBulk() {
   const reason = document.getElementById('bulkReason').value.trim();
   if (delta === 0 && !reason) { showToast('점수 또는 사유를 입력해주세요.'); return; }
   checked.forEach(idx => {
-    if (delta !== 0) state.scores[idx] = (state.scores[idx]||0) + delta;
+    if (delta !== 0) {
+      state.scores[idx] = (state.scores[idx]||0) + delta;
+      state.currency[idx] = (state.currency[idx]||0) + delta;
+    }
     addHistory(idx, delta, reason);
   });
   saveState();
@@ -395,6 +427,7 @@ function escHtml(s) {
 
 function changeScore(idx, delta, reason) {
   state.scores[idx] = (state.scores[idx]||0) + delta;
+  state.currency[idx] = (state.currency[idx]||0) + delta;
   addHistory(idx, delta, reason);
   saveState();
   const el = document.getElementById(`score-${idx}`);
@@ -534,7 +567,8 @@ function swapStudents(a, b) {
 }
 
 function shuffleSeats() {
-  const all = state.students.map((_,i)=>i);
+  // 삭제된(자리에서 빠진) 학생은 안 섞이도록, 실제로 어느 모둠엔가 배치되어 있는 학생만 대상으로 한다.
+  const all = state.groups.flatMap(g => g.members);
   for (let i = all.length-1; i > 0; i--) {
     const j = Math.floor(Math.random()*(i+1));
     [all[i],all[j]] = [all[j],all[i]];
@@ -561,8 +595,15 @@ function resetScores() {
   showToast('🔄 점수가 초기화되었습니다.');
 }
 
+function seatedIndices() {
+  return state.groups.flatMap(g => g.members);
+}
+
 function openSetting() {
-  document.getElementById('studentInput').value = state.students.join('\n');
+  const seats = seatedIndices();
+  document.getElementById('studentInput').value = seats.map(i => state.students[i]).join('\n');
+  document.getElementById('settingModalDesc').innerHTML =
+    `학생 이름을 한 줄에 하나씩, 현재 자리 순서(${seats.length}명)대로 입력해주세요.<br>저장하면 이름만 바뀌고 모둠 구조는 그대로 유지됩니다.`;
   document.getElementById('settingModal').style.display = 'flex';
 }
 
@@ -570,15 +611,19 @@ function saveSetting() {
   const lines = document.getElementById('studentInput').value
     .split('\n').map(s=>s.trim()).filter(s=>s);
   if (!lines.length) { showToast('이름을 입력해주세요.'); return; }
-  const oldPos = state.groups.map(g=>g.position);
-  state.students = lines;
-  state.scores = {};
-  state.spent = {};
-  state.history = {};
-  state.avatars = {};
-  lines.forEach((_,i) => { state.scores[i] = 0; state.spent[i] = 0; state.history[i] = []; state.avatars[i] = defaultAvatar(); });
-  state.groups = buildGroups(lines);
-  state.groups.forEach((g,i) => { if (oldPos[i]) g.position = oldPos[i]; });
+  const seats = seatedIndices();
+  if (lines.length !== seats.length) {
+    showToast(`자리 수(${seats.length}명)와 입력한 이름 수(${lines.length}명)가 달라요. 학생 추가/삭제로 자리 수를 먼저 맞춰주세요.`);
+    return;
+  }
+  seats.forEach((idx, i) => {
+    state.students[idx] = lines[i];
+    state.scores[idx] = 0;
+    state.currency[idx] = 0;
+    state.spent[idx] = 0;
+    state.history[idx] = [];
+    state.avatars[idx] = defaultAvatar();
+  });
   saveState();
   document.getElementById('settingModal').style.display = 'none';
   render();
@@ -593,6 +638,143 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
+
+// ===== 온보딩(최초 교실 설정) =====
+function calcGroupSizes(total, perGroup) {
+  total = Math.max(1, total|0);
+  perGroup = Math.max(1, perGroup|0);
+  const numGroups = Math.ceil(total / perGroup);
+  const sizes = new Array(numGroups).fill(perGroup);
+  sizes[numGroups - 1] = total - perGroup * (numGroups - 1);
+  return sizes;
+}
+
+function renderOnbGroupList() {
+  const list = document.getElementById('onbGroupList');
+  list.innerHTML = onbSizes.map((size, i) => `
+    <div class="onboarding-group-row">
+      <span class="gname">모둠 ${i+1}</span>
+      <input type="number" min="1" value="${size}" data-idx="${i}" class="onb-size-input">
+      <span>명</span>
+      <button type="button" class="gremove" data-idx="${i}" ${onbSizes.length <= 1 ? 'disabled' : ''}>✕ 삭제</button>
+    </div>`).join('');
+  list.querySelectorAll('.onb-size-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = parseInt(inp.dataset.idx);
+      const v = parseInt(inp.value);
+      onbSizes[i] = isNaN(v) || v < 1 ? 1 : v;
+    });
+  });
+  list.querySelectorAll('.gremove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (onbSizes.length <= 1) return;
+      onbSizes.splice(parseInt(btn.dataset.idx), 1);
+      renderOnbGroupList();
+    });
+  });
+}
+
+function showOnboarding() {
+  onbSizes = calcGroupSizes(21, 4);
+  renderOnbGroupList();
+  document.getElementById('onboardingModal').style.display = 'flex';
+}
+
+function startClassroom() {
+  const sizes = onbSizes.filter(n => n >= 1);
+  if (!sizes.length) { showToast('모둠을 1개 이상 만들어주세요.'); return; }
+  state = defaultState(sizes);
+  saveState();
+  document.getElementById('onboardingModal').style.display = 'none';
+  render();
+  showToast(`✅ ${sizes.reduce((a,b)=>a+b,0)}명, ${sizes.length}모둠으로 교실을 만들었어요!`);
+}
+
+document.getElementById('onbCalcBtn').addEventListener('click', () => {
+  const total = parseInt(document.getElementById('onbTotal').value);
+  const perGroup = parseInt(document.getElementById('onbPerGroup').value);
+  onbSizes = calcGroupSizes(total, perGroup);
+  renderOnbGroupList();
+});
+document.getElementById('onbAddGroupBtn').addEventListener('click', () => {
+  const perGroup = parseInt(document.getElementById('onbPerGroup').value) || 4;
+  onbSizes.push(perGroup);
+  renderOnbGroupList();
+});
+document.getElementById('onbStartBtn').addEventListener('click', startClassroom);
+
+// ===== 학급 초기화(새 학기 시작) =====
+document.getElementById('newSemesterBtn').addEventListener('click', () => {
+  if (!confirm('학급을 초기화할까요?\n모든 학생/점수/기록/아바타 데이터가 삭제되고 교실 설정을 처음부터 다시 합니다.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+});
+
+// ===== 학생 추가/삭제(부분 수정) =====
+function openRosterModal() {
+  const groupSelect = document.getElementById('rosterAddGroup');
+  groupSelect.innerHTML = state.groups.map(g => `<option value="${g.id}">${escHtml(g.name)} (${g.members.length}명)</option>`).join('');
+  document.getElementById('rosterAddName').value = '';
+  renderRosterRemoveList();
+  document.getElementById('rosterModal').style.display = 'flex';
+}
+
+function renderRosterRemoveList() {
+  const list = document.getElementById('rosterRemoveList');
+  const rows = [];
+  state.groups.forEach(g => {
+    g.members.forEach(idx => {
+      rows.push(`
+        <div class="roster-remove-item">
+          <span>${escHtml(g.name)} · ${escHtml(state.students[idx] || '?')}</span>
+          <button type="button" class="rremove" data-idx="${idx}" title="삭제">✕</button>
+        </div>`);
+    });
+  });
+  list.innerHTML = rows.join('') || '<div class="memo-history-empty">학생이 없어요.</div>';
+  list.querySelectorAll('.rremove').forEach(btn => {
+    btn.addEventListener('click', () => removeStudent(parseInt(btn.dataset.idx)));
+  });
+}
+
+function addStudent() {
+  const groupId = parseInt(document.getElementById('rosterAddGroup').value);
+  const name = document.getElementById('rosterAddName').value.trim();
+  if (!name) { showToast('학생 이름을 입력해주세요.'); return; }
+  const group = state.groups.find(g => g.id === groupId);
+  if (!group) return;
+  const newIdx = state.students.length;
+  state.students.push(name);
+  state.scores[newIdx] = 0;
+  state.currency[newIdx] = 0;
+  state.spent[newIdx] = 0;
+  state.history[newIdx] = [];
+  state.avatars[newIdx] = defaultAvatar();
+  group.members.push(newIdx);
+  saveState();
+  render();
+  openRosterModal();
+  showToast(`✅ ${name} 학생을 ${group.name}에 추가했습니다.`);
+}
+
+function removeStudent(idx) {
+  const name = state.students[idx] || '?';
+  if (!confirm(`${name} 학생을 자리에서 제거할까요?\n(점수/기록 데이터는 보존되지만 화면엔 더 이상 표시되지 않습니다)`)) return;
+  state.groups.forEach(g => {
+    const pos = g.members.indexOf(idx);
+    if (pos !== -1) g.members.splice(pos, 1);
+  });
+  saveState();
+  render();
+  openRosterModal();
+  showToast(`🗑️ ${name} 학생을 제거했습니다.`);
+}
+
+document.getElementById('rosterBtn').addEventListener('click', openRosterModal);
+document.getElementById('closeRosterBtn').addEventListener('click', () => {
+  document.getElementById('rosterModal').style.display = 'none';
+});
+document.getElementById('rosterAddBtn').addEventListener('click', addStudent);
 
 document.getElementById('shuffleBtn').addEventListener('click', shuffleSeats);
 document.getElementById('resetScoreBtn').addEventListener('click', resetScores);
@@ -618,5 +800,3 @@ document.getElementById('bulkSelectAllBtn').addEventListener('click', () => {
 document.getElementById('bulkSelectNoneBtn').addEventListener('click', () => {
   document.querySelectorAll('.bulk-student-check').forEach(cb => cb.checked = false);
 });
-
-render();

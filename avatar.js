@@ -22,11 +22,14 @@ function studentValid() {
   return state && Number.isInteger(studentIdx) && state.students && state.students[studentIdx] !== undefined;
 }
 
-// 상점에서 실제 쓸 수 있는 코인 = 누적 점수 - 지금까지 쓴 금액.
+// 상점에서 실제 쓸 수 있는 코인 = 누적 재화(currency) - 지금까지 쓴 금액.
+// currency는 점수(하트)와 함께 오르내리지만, "점수 초기화" 버튼의 영향은 받지 않는 별도 값이다.
 // 구매해도 점수(자리표에 보이는 값)는 그대로 두고, 쓴 금액만 늘려서 잔액을 줄인다.
 function availableCoins(idx) {
+  if (!state.currency) state.currency = {};
   if (!state.spent) state.spent = {};
-  return (state.scores[idx] || 0) - (state.spent[idx] || 0);
+  const currency = state.currency[idx] !== undefined ? state.currency[idx] : (state.scores[idx] || 0);
+  return currency - (state.spent[idx] || 0);
 }
 
 function ensureAvatarShape(avatar) {
