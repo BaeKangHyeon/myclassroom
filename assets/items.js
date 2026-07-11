@@ -75,9 +75,9 @@ const TITLES = [
   { id: 'title_9', name: '자수정 왕관', price: 50, image: 'assets/medal_9.png' },
 ];
 
-function defaultAvatar() {
+function defaultAvatar(gender) {
   return {
-    gender: null,
+    gender: gender || null,
     inventory: ['outfit_basic', 'bg_none', 'frame_none', 'title_none'],
     equipped: { outfit: 'outfit_basic', background: 'bg_none', frame: 'frame_none', title: 'title_none' }
   };

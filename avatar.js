@@ -1,22 +1,31 @@
-const STORAGE_KEY = 'maple_classroom_v4';
+// 이 기기의 신원(어느 반, 어떤 역할인지) — index.js와 같은 키를 쓴다.
+const CLASS_CODE_KEY = 'maple_class_code';
+const ROLE_KEY = 'maple_role';
+const STUDENT_IDX_KEY = 'maple_student_idx';
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return null;
-}
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
+const role = localStorage.getItem(ROLE_KEY);
+const classCode = localStorage.getItem(CLASS_CODE_KEY);
+// 학생 기기는 저장된 자기 번호만 사용(주소를 바꿔도 남의 아바타로 못 감).
+// 선생님이 자리표에서 학생 카드를 눌러 들어온 경우에만 주소의 번호를 쓴다.
 const params = new URLSearchParams(location.search);
-const studentIdx = parseInt(params.get('student'));
-let state = loadState();
+const studentIdx = role === 'student'
+  ? parseInt(localStorage.getItem(STUDENT_IDX_KEY))
+  : parseInt(params.get('student'));
+
+let state = null;
+let docRef = null;
 let currentTab = 'shop';
 let currentCategory = 'outfit';
+
+// 내 아바타와 쓴 금액만 콕 집어 저장한다.
+// (문서 전체를 덮어쓰지 않으므로 선생님이 동시에 점수를 바꿔도 서로 안 지워짐)
+function saveAvatarState() {
+  if (!docRef) return;
+  const payload = {};
+  payload[`avatars.${studentIdx}`] = state.avatars[studentIdx];
+  payload[`spent.${studentIdx}`] = (state.spent && state.spent[studentIdx]) || 0;
+  docRef.update(payload).catch(() => showToast('⚠️ 저장 실패! 인터넷을 확인해주세요.'));
+}
 
 function studentValid() {
   return state && Number.isInteger(studentIdx) && state.students && state.students[studentIdx] !== undefined;
@@ -59,29 +68,19 @@ function init() {
   ensureAvatarShape(avatar);
   document.getElementById('studentTitle').textContent = `🍄 ${state.students[studentIdx]}의 아바타`;
   document.getElementById('heartCount').textContent = availableCoins(studentIdx);
+  // 성별은 선생님이 지정한다. 아직 지정 전이면 학생은 기다리는 화면만 본다(직접 선택 불가).
   if (!avatar.gender) {
-    showGenderPick();
+    document.getElementById('genderWait').style.display = 'flex';
+    document.getElementById('mainArea').style.display = 'none';
     return;
   }
   showMain();
 }
 
-function showGenderPick() {
-  document.getElementById('genderPick').style.display = 'flex';
-  document.getElementById('mainArea').style.display = 'none';
-}
-
 function showMain() {
-  document.getElementById('genderPick').style.display = 'none';
+  document.getElementById('genderWait').style.display = 'none';
   document.getElementById('mainArea').style.display = 'flex';
   render();
-}
-
-function pickGender(gender) {
-  state.avatars[studentIdx].gender = gender;
-  saveState();
-  showMain();
-  bounceAvatar();
 }
 
 function render() {
@@ -244,7 +243,7 @@ function buyItem(id) {
   if (!state.spent) state.spent = {};
   state.spent[studentIdx] = (state.spent[studentIdx] || 0) + item.price;
   avatar.inventory.push(id);
-  saveState();
+  saveAvatarState();
   flashHeart();
   document.getElementById('heartCount').textContent = availableCoins(studentIdx);
   showToast(`✅ ${item.name}을(를) 구매했어요!`);
@@ -263,7 +262,7 @@ function equipItem(id) {
   } else {
     avatar.equipped.outfit = id;
   }
-  saveState();
+  saveAvatarState();
   bounceAvatar();
   showToast(`✨ ${item.name} 적용!`);
   render();
@@ -278,9 +277,6 @@ function showToast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
-document.getElementById('pickBoy').addEventListener('click', () => pickGender('boy'));
-document.getElementById('pickGirl').addEventListener('click', () => pickGender('girl'));
-document.getElementById('changeGenderBtn').addEventListener('click', showGenderPick);
 document.getElementById('backBtn').addEventListener('click', () => location.href = 'index.html');
 document.getElementById('backBtn2').addEventListener('click', () => location.href = 'index.html');
 document.querySelectorAll('.cat-tab').forEach(btn => {
@@ -298,4 +294,35 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   });
 });
 
-init();
+// ===== 시작: 반 문서 실시간 구독 =====
+function isSeated(idx) {
+  return !!(state && state.groups && state.groups.some(g => g.members.includes(idx)));
+}
+
+// 학급이 초기화됐거나 이 학생이 삭제된 경우: 기기의 기억을 지우고 처음 화면으로
+function leaveToGate() {
+  localStorage.removeItem(ROLE_KEY);
+  localStorage.removeItem(STUDENT_IDX_KEY);
+  location.href = 'index.html';
+}
+
+function bootstrapAvatar() {
+  if (!firebaseReady() || !classCode || isNaN(studentIdx)) {
+    if (role === 'student') { leaveToGate(); return; }
+    document.getElementById('notFound').style.display = 'flex';
+    return;
+  }
+  if (role === 'student') {
+    // 학생 기기는 자리표로 돌아갈 수 없으므로 돌아가기 버튼을 숨긴다.
+    document.getElementById('backBtn').style.display = 'none';
+  }
+  docRef = db.collection('classrooms').doc(classCode);
+  docRef.onSnapshot(snap => {
+    if (!snap.exists) { leaveToGate(); return; }
+    if (snap.metadata.hasPendingWrites) return; // 내가 방금 쓴 내용의 메아리는 무시
+    state = snap.data();
+    if (role === 'student' && !isSeated(studentIdx)) { leaveToGate(); return; }
+    init();
+  }, () => showToast('⚠️ 서버 연결 오류! 인터넷을 확인해주세요.'));
+}
+bootstrapAvatar();

@@ -1,4 +1,7 @@
-const STORAGE_KEY = 'maple_classroom_v4';
+// 이 기기의 신원(어느 반, 어떤 역할인지)을 기억하는 localStorage 키
+const CLASS_CODE_KEY = 'maple_class_code';
+const ROLE_KEY = 'maple_role';           // 'teacher' | 'student'
+const STUDENT_IDX_KEY = 'maple_student_idx';
 
 // 상단 가운데 빈자리(모둠1-모둠4 사이)에 들어갈 할 일 메모판 크기/위치. computeLayout()의 격자 계산과 맞춰둔 값.
 const TODO_W = 660, TODO_H = 469;
@@ -8,13 +11,12 @@ let onbSizes = [];
 let currentScale = 1;
 const MIN_SCALE = 0.3; // 학생 수가 아주 많을 때만 작동하는 최소 안전장치, 평소엔 아래 자동맞춤 계산이 이보다 항상 큼
 
-let state = loadState();
-if (state) {
-  saveState();
-  render();
-} else {
-  showOnboarding();
-}
+// 반 전체 데이터(state)는 Firestore의 classrooms/{반코드} 문서 하나에 저장되고,
+// 교사/학생 화면 모두 이 문서를 실시간 구독한다. state가 null인 동안은 아직 로딩 전.
+let state = null;
+let stateDocRef = null;
+let saveTimer = null;
+let pendingJoin = null; // 학생 입장 절차 중 임시 보관 (코드 + 반 데이터)
 
 // groupSizes: 모둠별 인원수 배열, 예 [4,4,4,4,4,3]
 function defaultState(groupSizes) {
@@ -89,35 +91,34 @@ function buildGroups(students, groupSizes) {
   return groups;
 }
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (!parsed.history) parsed.history = {};
-      if (!parsed.avatars) parsed.avatars = {};
-      if (!parsed.spent) parsed.spent = {};
-      if (!parsed.currency) parsed.currency = {};
-      if (parsed.todoNote === undefined) parsed.todoNote = '';
-      if (!parsed.todoPos) parsed.todoPos = { ...TODO_DEFAULT_POS };
-      parsed.students.forEach((_, i) => {
-        if (!parsed.history[i]) parsed.history[i] = [];
-        if (!parsed.avatars[i]) parsed.avatars[i] = defaultAvatar();
-        if (parsed.spent[i] === undefined) parsed.spent[i] = 0;
-        // 기존 저장 데이터엔 재화(currency) 필드가 없었으므로, 지금까지 쌓인 점수를 초기 재화로 이어받는다.
-        if (parsed.currency[i] === undefined) parsed.currency[i] = parsed.scores[i] || 0;
-      });
-      return parsed;
-    }
-  } catch(e) {}
-  return null;
+// Firestore에서 내려온 데이터에 빠진 필드가 있으면 기본값으로 채운다.
+function ensureStateShape(s) {
+  if (!s.history) s.history = {};
+  if (!s.avatars) s.avatars = {};
+  if (!s.spent) s.spent = {};
+  if (!s.currency) s.currency = {};
+  if (s.todoNote === undefined) s.todoNote = '';
+  if (!s.todoPos) s.todoPos = { ...TODO_DEFAULT_POS };
+  s.students.forEach((_, i) => {
+    if (!s.history[i]) s.history[i] = [];
+    if (!s.avatars[i]) s.avatars[i] = defaultAvatar();
+    if (s.spent[i] === undefined) s.spent[i] = 0;
+    if (s.currency[i] === undefined) s.currency[i] = s.scores[i] || 0;
+  });
+  return s;
 }
 
+// state 전체를 Firestore에 저장. 연달아 호출돼도(드래그 등) 잠깐 모아서 한 번만 쓴다.
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (!stateDocRef || !state) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    stateDocRef.set(state).catch(() => showToast('⚠️ 저장 실패! 인터넷 연결을 확인해주세요.'));
+  }, 300);
 }
 
 function render() {
+  if (!state) return;
   const canvasInner = document.getElementById('canvasInner');
   canvasInner.innerHTML = '';
 
@@ -382,6 +383,7 @@ function saveMemo() {
 }
 
 function openBulkModal() {
+  if (!state) return;
   const list = document.getElementById('bulkStudentList');
   let html = '';
   state.groups.forEach(group => {
@@ -567,6 +569,7 @@ function swapStudents(a, b) {
 }
 
 function shuffleSeats() {
+  if (!state) return;
   // 삭제된(자리에서 빠진) 학생은 안 섞이도록, 실제로 어느 모둠엔가 배치되어 있는 학생만 대상으로 한다.
   const all = state.groups.flatMap(g => g.members);
   for (let i = all.length-1; i > 0; i--) {
@@ -588,6 +591,7 @@ function shuffleSeats() {
 }
 
 function resetScores() {
+  if (!state) return;
   if (!confirm('모든 학생의 점수를 0으로 초기화할까요?')) return;
   state.students.forEach((_,i) => { state.scores[i] = 0; });
   saveState();
@@ -599,35 +603,64 @@ function seatedIndices() {
   return state.groups.flatMap(g => g.members);
 }
 
+// 성별 선택 토글 버튼 HTML (남/여). 현재 선택된 쪽에 active.
+function genderToggleHtml(selected, idxAttr) {
+  const g = selected === 'girl' ? 'girl' : 'boy';
+  return `<div class="gender-toggle"${idxAttr !== undefined ? ` data-idx="${idxAttr}"` : ''}>
+    <button type="button" data-g="boy" class="${g === 'boy' ? 'active' : ''}">남</button>
+    <button type="button" data-g="girl" class="${g === 'girl' ? 'active' : ''}">여</button>
+  </div>`;
+}
+
+// 한 토글 묶음 안에서 남/여 버튼 클릭 시 active 이동
+function bindGenderToggle(container) {
+  container.querySelectorAll('.gender-toggle').forEach(tg => {
+    tg.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+      });
+    });
+  });
+}
+
 function openSetting() {
+  if (!state) return;
   const seats = seatedIndices();
-  document.getElementById('studentInput').value = seats.map(i => state.students[i]).join('\n');
   document.getElementById('settingModalDesc').innerHTML =
-    `학생 이름을 한 줄에 하나씩, 현재 자리 순서(${seats.length}명)대로 입력해주세요.<br>저장하면 이름만 바뀌고 모둠 구조는 그대로 유지됩니다.`;
+    `각 자리의 학생 이름과 성별을 정해주세요. (현재 ${seats.length}명)<br>성별에 맞는 아바타가 학생 화면에 적용되고, 학생은 성별을 바꿀 수 없어요.`;
+  const list = document.getElementById('studentSetupList');
+  list.innerHTML = seats.map((idx, i) => {
+    const gender = (state.avatars[idx] && state.avatars[idx].gender) || 'boy';
+    return `<div class="student-setup-row" data-idx="${idx}">
+      <span class="student-setup-num">${i + 1}</span>
+      <input class="student-setup-name" type="text" value="${escHtml(state.students[idx] || '')}" placeholder="이름">
+      ${genderToggleHtml(gender)}
+    </div>`;
+  }).join('');
+  bindGenderToggle(list);
   document.getElementById('settingModal').style.display = 'flex';
 }
 
 function saveSetting() {
-  const lines = document.getElementById('studentInput').value
-    .split('\n').map(s=>s.trim()).filter(s=>s);
-  if (!lines.length) { showToast('이름을 입력해주세요.'); return; }
-  const seats = seatedIndices();
-  if (lines.length !== seats.length) {
-    showToast(`자리 수(${seats.length}명)와 입력한 이름 수(${lines.length}명)가 달라요. 학생 추가/삭제로 자리 수를 먼저 맞춰주세요.`);
-    return;
-  }
-  seats.forEach((idx, i) => {
-    state.students[idx] = lines[i];
-    state.scores[idx] = 0;
-    state.currency[idx] = 0;
-    state.spent[idx] = 0;
-    state.history[idx] = [];
-    state.avatars[idx] = defaultAvatar();
+  const rows = Array.from(document.querySelectorAll('#studentSetupList .student-setup-row'));
+  const entries = rows.map(row => ({
+    idx: parseInt(row.dataset.idx),
+    name: row.querySelector('.student-setup-name').value.trim(),
+    gender: row.querySelector('.gender-toggle button.active').dataset.g
+  }));
+  if (entries.some(e => !e.name)) { showToast('빈 이름이 있어요. 모든 자리의 이름을 입력해주세요.'); return; }
+  entries.forEach(e => {
+    state.students[e.idx] = e.name;
+    state.scores[e.idx] = 0;
+    state.currency[e.idx] = 0;
+    state.spent[e.idx] = 0;
+    state.history[e.idx] = [];
+    state.avatars[e.idx] = defaultAvatar(e.gender);
   });
   saveState();
   document.getElementById('settingModal').style.display = 'none';
   render();
-  showToast(`✅ ${lines.length}명의 학생이 저장되었습니다.`);
+  showToast(`✅ ${entries.length}명의 학생이 저장되었습니다.`);
 }
 
 let toastTimer;
@@ -680,14 +713,39 @@ function showOnboarding() {
   document.getElementById('onboardingModal').style.display = 'flex';
 }
 
-function startClassroom() {
+async function startClassroom() {
   const sizes = onbSizes.filter(n => n >= 1);
   if (!sizes.length) { showToast('모둠을 1개 이상 만들어주세요.'); return; }
+
+  // 다른 반과 절대 안 겹치는 반 코드를 하나 만든다 (이미 있으면 다시 뽑기).
+  let code = null;
+  for (let i = 0; i < 5; i++) {
+    const candidate = genClassCode();
+    try {
+      const snap = await db.collection('classrooms').doc(candidate).get();
+      if (!snap.exists) { code = candidate; break; }
+    } catch (e) {
+      showToast('⚠️ 서버 연결에 실패했어요. 인터넷을 확인해주세요.');
+      return;
+    }
+  }
+  if (!code) { showToast('반 코드 생성에 실패했어요. 다시 시도해주세요.'); return; }
+
   state = defaultState(sizes);
-  saveState();
+  try {
+    await db.collection('classrooms').doc(code).set(state);
+  } catch (e) {
+    showToast('⚠️ 학급 생성에 실패했어요. 인터넷을 확인해주세요.');
+    return;
+  }
+  // 이 기기를 "이 반의 선생님"으로 기억
+  localStorage.setItem(ROLE_KEY, 'teacher');
+  localStorage.setItem(CLASS_CODE_KEY, code);
+  history.replaceState(null, '', '?class=' + code);
+
   document.getElementById('onboardingModal').style.display = 'none';
-  render();
-  showToast(`✅ ${sizes.reduce((a,b)=>a+b,0)}명, ${sizes.length}모둠으로 교실을 만들었어요!`);
+  connectClassroom(code);
+  showToast(`✅ 학급 생성 완료! 반 코드: ${code}`);
 }
 
 document.getElementById('onbCalcBtn').addEventListener('click', () => {
@@ -705,13 +763,21 @@ document.getElementById('onbStartBtn').addEventListener('click', startClassroom)
 
 // ===== 학급 초기화(새 학기 시작) =====
 document.getElementById('newSemesterBtn').addEventListener('click', () => {
-  if (!confirm('학급을 초기화할까요?\n모든 학생/점수/기록/아바타 데이터가 삭제되고 교실 설정을 처음부터 다시 합니다.')) return;
-  localStorage.removeItem(STORAGE_KEY);
-  location.reload();
+  if (!state || !stateDocRef) return;
+  if (!confirm('학급을 초기화할까요?\n모든 학생/점수/기록/아바타 데이터가 삭제되고(학생들 기기에서도), 교실 설정을 처음부터 다시 합니다.')) return;
+  stateDocRef.delete().then(() => {
+    clearIdentity();
+    // 이 기기에 남아있던 학교/급식/시간표 설정도 지워서 새 학급이 처음부터 고를 수 있게 한다.
+    localStorage.removeItem(NEIS_STORAGE_KEY);
+    localStorage.removeItem(NEIS_CACHE_KEY);
+    localStorage.removeItem(TIMETABLE_STORAGE_KEY);
+    location.href = location.pathname; // 주소의 ?class= 부분을 떼고 처음 화면으로
+  }).catch(() => showToast('⚠️ 초기화 실패! 인터넷 연결을 확인해주세요.'));
 });
 
 // ===== 학생 추가/삭제(부분 수정) =====
 function openRosterModal() {
+  if (!state) return;
   const groupSelect = document.getElementById('rosterAddGroup');
   groupSelect.innerHTML = state.groups.map(g => `<option value="${g.id}">${escHtml(g.name)} (${g.members.length}명)</option>`).join('');
   document.getElementById('rosterAddName').value = '';
@@ -741,6 +807,7 @@ function addStudent() {
   const groupId = parseInt(document.getElementById('rosterAddGroup').value);
   const name = document.getElementById('rosterAddName').value.trim();
   if (!name) { showToast('학생 이름을 입력해주세요.'); return; }
+  const gender = document.querySelector('#rosterAddGender button.active').dataset.g;
   const group = state.groups.find(g => g.id === groupId);
   if (!group) return;
   const newIdx = state.students.length;
@@ -749,7 +816,7 @@ function addStudent() {
   state.currency[newIdx] = 0;
   state.spent[newIdx] = 0;
   state.history[newIdx] = [];
-  state.avatars[newIdx] = defaultAvatar();
+  state.avatars[newIdx] = defaultAvatar(gender);
   group.members.push(newIdx);
   saveState();
   render();
@@ -775,6 +842,7 @@ document.getElementById('closeRosterBtn').addEventListener('click', () => {
   document.getElementById('rosterModal').style.display = 'none';
 });
 document.getElementById('rosterAddBtn').addEventListener('click', addStudent);
+bindGenderToggle(document.getElementById('rosterModal'));
 
 document.getElementById('shuffleBtn').addEventListener('click', shuffleSeats);
 document.getElementById('resetScoreBtn').addEventListener('click', resetScores);
@@ -800,3 +868,123 @@ document.getElementById('bulkSelectAllBtn').addEventListener('click', () => {
 document.getElementById('bulkSelectNoneBtn').addEventListener('click', () => {
   document.querySelectorAll('.bulk-student-check').forEach(cb => cb.checked = false);
 });
+
+// ===== 입장(반 코드/이름 선택) & Firestore 연결 =====
+
+// 헷갈리는 글자(0/O, 1/I/L)를 뺀 알파벳+숫자로 6자리 반 코드 생성
+function genClassCode() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function clearIdentity() {
+  localStorage.removeItem(ROLE_KEY);
+  localStorage.removeItem(CLASS_CODE_KEY);
+  localStorage.removeItem(STUDENT_IDX_KEY);
+}
+
+// 반 문서를 실시간 구독. 다른 기기(학생 아바타 구매 등)의 변경이 자동으로 화면에 반영된다.
+function connectClassroom(code) {
+  stateDocRef = db.collection('classrooms').doc(code);
+  const badge = document.getElementById('classCodeBadge');
+  badge.textContent = `반 코드 ${code}`;
+  badge.style.display = 'inline-block';
+
+  stateDocRef.onSnapshot(snap => {
+    if (!snap.exists) {
+      // 학급이 초기화(삭제)됨 → 이 기기의 기억도 지우고 처음 화면으로
+      clearIdentity();
+      location.href = location.pathname;
+      return;
+    }
+    if (snap.metadata.hasPendingWrites) return; // 내가 방금 쓴 내용의 메아리는 무시 (이미 화면에 반영됨)
+    state = ensureStateShape(snap.data());
+    render();
+  }, () => showToast('⚠️ 서버 연결 오류! 인터넷을 확인해주세요.'));
+}
+
+function showGate(prefillCode) {
+  document.getElementById('gateCodeInput').value = prefillCode || '';
+  if (typeof usingMockDb !== 'undefined' && usingMockDb) {
+    document.getElementById('gateMockNotice').style.display = 'block';
+  }
+  document.getElementById('gateModal').style.display = 'flex';
+}
+
+async function gateEnter() {
+  const code = document.getElementById('gateCodeInput').value.trim().toUpperCase();
+  if (!code) { showToast('반 코드를 입력해주세요.'); return; }
+  let snap;
+  try {
+    snap = await db.collection('classrooms').doc(code).get();
+  } catch (e) {
+    showToast('⚠️ 서버 연결에 실패했어요. 인터넷을 확인해주세요.');
+    return;
+  }
+  if (!snap.exists) { showToast('반 코드를 찾을 수 없어요. 다시 확인해주세요.'); return; }
+  pendingJoin = { code, data: snap.data() };
+  renderNameGate();
+  document.getElementById('gateModal').style.display = 'none';
+  document.getElementById('nameGateModal').style.display = 'flex';
+}
+
+// 자리에 배치된 학생들의 이름 버튼 목록
+function renderNameGate() {
+  const grid = document.getElementById('nameGateGrid');
+  const data = pendingJoin.data;
+  const seats = (data.groups || []).flatMap(g => g.members);
+  grid.innerHTML = seats.map(idx => `
+    <button type="button" class="name-gate-btn" data-idx="${idx}">${escHtml(data.students[idx] || '?')}</button>
+  `).join('') || '<div class="memo-history-empty">아직 등록된 학생이 없어요.</div>';
+  grid.querySelectorAll('.name-gate-btn').forEach(btn => {
+    btn.addEventListener('click', () => bindStudent(parseInt(btn.dataset.idx)));
+  });
+}
+
+// 이 기기를 "이 반의 이 학생"으로 기억하고 아바타 화면으로 이동
+function bindStudent(idx) {
+  localStorage.setItem(ROLE_KEY, 'student');
+  localStorage.setItem(CLASS_CODE_KEY, pendingJoin.code);
+  localStorage.setItem(STUDENT_IDX_KEY, String(idx));
+  location.href = 'avatar.html';
+}
+
+document.getElementById('gateEnterBtn').addEventListener('click', gateEnter);
+document.getElementById('gateCodeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') gateEnter();
+});
+document.getElementById('gateNewClassBtn').addEventListener('click', () => {
+  document.getElementById('gateModal').style.display = 'none';
+  showOnboarding();
+});
+document.getElementById('nameGateBackBtn').addEventListener('click', () => {
+  document.getElementById('nameGateModal').style.display = 'none';
+  showGate(pendingJoin ? pendingJoin.code : '');
+});
+
+// ===== 시작: 이 기기가 누구인지에 따라 화면 분기 =====
+function bootstrap() {
+  if (!firebaseReady()) {
+    showGate('');
+    showToast('⚠️ 서버 설정이 필요해요 (firebase-config.js)');
+    return;
+  }
+  const urlCode = (new URLSearchParams(location.search).get('class') || '').trim().toUpperCase();
+  const role = localStorage.getItem(ROLE_KEY);
+  const savedCode = localStorage.getItem(CLASS_CODE_KEY) || '';
+
+  if (role === 'student') {
+    // 학생 기기는 자리표 화면 접근 불가 → 항상 자기 아바타 화면으로
+    location.replace('avatar.html');
+    return;
+  }
+  if (role === 'teacher' && savedCode) {
+    if (!urlCode || urlCode !== savedCode) history.replaceState(null, '', '?class=' + savedCode);
+    connectClassroom(savedCode);
+    return;
+  }
+  showGate(urlCode);
+}
+bootstrap();
