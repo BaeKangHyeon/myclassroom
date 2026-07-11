@@ -14,6 +14,10 @@
   <div class="tab-bar">
     <button class="tab-btn active" id="tabSeatBtn" type="button">🪑 자리 배치</button>
     <button class="tab-btn" id="tabScheduleBtn" type="button">📅 시간표·급식</button>
+    <button class="mini-qr" id="miniQrBtn" type="button" title="학생 입장 QR (클릭하면 크게 보여요)" style="display:none;">
+      <img id="miniQrImg" alt="입장 QR">
+      <span class="mini-qr-label">입장 QR</span>
+    </button>
   </div>
   <div class="toolbar-btns" id="seatToolbarBtns">
     <button class="btn green" id="settingBtn">👥 학생 설정</button>
@@ -80,6 +84,18 @@
 
     <div class="modal-btns">
       <button class="btn blue" id="closeRosterBtn">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="qrModal" style="display:none;">
+  <div class="modal-box" style="text-align:center;">
+    <div class="modal-title">📱 학생 입장 QR</div>
+    <div class="modal-desc">학생이 휴대폰 카메라로 이 QR을 비추면 우리 반으로 바로 들어와요.</div>
+    <img id="bigQrImg" class="big-qr" alt="입장 QR">
+    <div class="qr-url" id="qrUrlText"></div>
+    <div class="modal-btns" style="justify-content:center;">
+      <button class="btn blue" id="closeQrBtn">닫기</button>
     </div>
   </div>
 </div>
@@ -201,6 +217,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="assets/qrcode.min.js"></script>
 <script src="assets/items.js"></script>
 <script src="index.js"></script>
 <script src="schedule.js"></script>

@@ -844,6 +844,17 @@ document.getElementById('closeRosterBtn').addEventListener('click', () => {
 document.getElementById('rosterAddBtn').addEventListener('click', addStudent);
 bindGenderToggle(document.getElementById('rosterModal'));
 
+// 작은 QR 클릭 → 크게 보기
+document.getElementById('miniQrBtn').addEventListener('click', () => {
+  document.getElementById('qrModal').style.display = 'flex';
+});
+document.getElementById('closeQrBtn').addEventListener('click', () => {
+  document.getElementById('qrModal').style.display = 'none';
+});
+document.getElementById('qrModal').addEventListener('click', e => {
+  if (e.target.id === 'qrModal') e.target.style.display = 'none'; // 바깥 클릭 시 닫기
+});
+
 document.getElementById('shuffleBtn').addEventListener('click', shuffleSeats);
 document.getElementById('resetScoreBtn').addEventListener('click', resetScores);
 document.getElementById('settingBtn').addEventListener('click', openSetting);
@@ -886,11 +897,32 @@ function clearIdentity() {
 }
 
 // 반 문서를 실시간 구독. 다른 기기(학생 아바타 구매 등)의 변경이 자동으로 화면에 반영된다.
+// 학생이 스캔해서 바로 들어오는 입장 주소
+function joinUrl(code) {
+  return location.origin + location.pathname + '?class=' + code;
+}
+
+// 반 입장 주소를 QR로 만들어 상단의 작은 QR과 확대용 QR에 넣는다.
+function setupQr(code) {
+  try {
+    const url = joinUrl(code);
+    const qr = qrcode(0, 'M'); // 0=크기 자동, M=중간 오류복원
+    qr.addData(url);
+    qr.make();
+    const dataUrl = qr.createDataURL(8, 2); // 큼직하게 만들고 작은 QR은 CSS로 축소(선명 유지)
+    document.getElementById('miniQrImg').src = dataUrl;
+    document.getElementById('bigQrImg').src = dataUrl;
+    document.getElementById('qrUrlText').textContent = url;
+    document.getElementById('miniQrBtn').style.display = 'inline-flex';
+  } catch (e) {}
+}
+
 function connectClassroom(code) {
   stateDocRef = db.collection('classrooms').doc(code);
   const badge = document.getElementById('classCodeBadge');
   badge.textContent = `반 코드 ${code}`;
   badge.style.display = 'inline-block';
+  setupQr(code);
 
   stateDocRef.onSnapshot(snap => {
     if (!snap.exists) {
