@@ -2,6 +2,7 @@
 const CLASS_CODE_KEY = 'maple_class_code';
 const ROLE_KEY = 'maple_role';           // 'teacher' | 'student'
 const STUDENT_IDX_KEY = 'maple_student_idx';
+const BIND_TOKEN_KEY = 'maple_bind_token'; // 이 기기가 이름을 고를 때의 "연결 회차". 선생님이 초기화하면 이 숫자가 올라가서 기기가 스스로 로그아웃된다.
 
 // 상단 가운데 빈자리(모둠1-모둠4 사이)에 들어갈 할 일 메모판 크기/위치. computeLayout()의 격자 계산과 맞춰둔 값.
 const TODO_W = 660, TODO_H = 469;
@@ -793,13 +794,19 @@ function renderRosterRemoveList() {
       rows.push(`
         <div class="roster-remove-item">
           <span>${escHtml(g.name)} · ${escHtml(state.students[idx] || '?')}</span>
-          <button type="button" class="rremove" data-idx="${idx}" title="삭제">✕</button>
+          <span class="roster-row-actions">
+            <button type="button" class="rdevice" data-idx="${idx}" title="이 학생이 이름을 잘못 골랐을 때, 그 기기를 이름 선택 화면으로 되돌립니다">📱 기기 초기화</button>
+            <button type="button" class="rremove" data-idx="${idx}" title="자리에서 삭제">✕</button>
+          </span>
         </div>`);
     });
   });
   list.innerHTML = rows.join('') || '<div class="memo-history-empty">학생이 없어요.</div>';
   list.querySelectorAll('.rremove').forEach(btn => {
     btn.addEventListener('click', () => removeStudent(parseInt(btn.dataset.idx)));
+  });
+  list.querySelectorAll('.rdevice').forEach(btn => {
+    btn.addEventListener('click', () => disconnectStudentDevice(parseInt(btn.dataset.idx)));
   });
 }
 
@@ -822,6 +829,17 @@ function addStudent() {
   render();
   openRosterModal();
   showToast(`✅ ${name} 학생을 ${group.name}에 추가했습니다.`);
+}
+
+// 학생이 실수로 다른 이름을 골랐을 때: 그 학생의 연결 회차를 올려서, 해당 기기가 자동으로 이름 선택 화면으로 돌아가게 한다.
+function disconnectStudentDevice(idx) {
+  if (!state) return;
+  const name = state.students[idx] || '?';
+  if (!confirm(`"${name}" 자리의 기기 연결을 초기화할까요?\n그 학생 기기는 다시 이름 선택 화면으로 돌아가고, 아바타/점수 데이터는 그대로 유지됩니다.`)) return;
+  if (!state.bindTokens) state.bindTokens = {};
+  state.bindTokens[idx] = (state.bindTokens[idx] || 0) + 1;
+  saveState();
+  showToast(`📱 "${name}" 자리의 기기 연결을 초기화했어요.`);
 }
 
 function removeStudent(idx) {
@@ -945,21 +963,27 @@ function showGate(prefillCode) {
   document.getElementById('gateModal').style.display = 'flex';
 }
 
-async function gateEnter() {
-  const code = document.getElementById('gateCodeInput').value.trim().toUpperCase();
+// 반 코드로 입장 → 이름 선택 화면 표시. (직접 입력, QR 스캔, 기기 초기화 후 재입장에서 공용으로 씀)
+async function enterCode(rawCode) {
+  const code = (rawCode || '').trim().toUpperCase();
   if (!code) { showToast('반 코드를 입력해주세요.'); return; }
   let snap;
   try {
     snap = await db.collection('classrooms').doc(code).get();
   } catch (e) {
     showToast('⚠️ 서버 연결에 실패했어요. 인터넷을 확인해주세요.');
+    showGate(code);
     return;
   }
-  if (!snap.exists) { showToast('반 코드를 찾을 수 없어요. 다시 확인해주세요.'); return; }
+  if (!snap.exists) { showToast('반 코드를 찾을 수 없어요. 다시 확인해주세요.'); showGate(code); return; }
   pendingJoin = { code, data: snap.data() };
   renderNameGate();
   document.getElementById('gateModal').style.display = 'none';
   document.getElementById('nameGateModal').style.display = 'flex';
+}
+
+function gateEnter() {
+  enterCode(document.getElementById('gateCodeInput').value);
 }
 
 // 자리에 배치된 학생들의 이름 버튼 목록
@@ -980,6 +1004,9 @@ function bindStudent(idx) {
   localStorage.setItem(ROLE_KEY, 'student');
   localStorage.setItem(CLASS_CODE_KEY, pendingJoin.code);
   localStorage.setItem(STUDENT_IDX_KEY, String(idx));
+  // 지금 시점의 연결 회차를 기억. 나중에 선생님이 이 값을 올리면(초기화) 기기가 스스로 로그아웃한다.
+  const token = (pendingJoin.data.bindTokens && pendingJoin.data.bindTokens[idx]) || 0;
+  localStorage.setItem(BIND_TOKEN_KEY, String(token));
   location.href = 'avatar.html';
 }
 
@@ -1017,6 +1044,11 @@ function bootstrap() {
     connectClassroom(savedCode);
     return;
   }
-  showGate(urlCode);
+  // 주소에 반 코드가 있으면(QR 스캔 또는 기기 초기화 후 돌아옴) 코드 입력을 건너뛰고 바로 이름 선택으로
+  if (urlCode) {
+    enterCode(urlCode);
+    return;
+  }
+  showGate('');
 }
 bootstrap();

@@ -2,6 +2,7 @@
 const CLASS_CODE_KEY = 'maple_class_code';
 const ROLE_KEY = 'maple_role';
 const STUDENT_IDX_KEY = 'maple_student_idx';
+const BIND_TOKEN_KEY = 'maple_bind_token';
 
 const role = localStorage.getItem(ROLE_KEY);
 const classCode = localStorage.getItem(CLASS_CODE_KEY);
@@ -299,11 +300,13 @@ function isSeated(idx) {
   return !!(state && state.groups && state.groups.some(g => g.members.includes(idx)));
 }
 
-// 학급이 초기화됐거나 이 학생이 삭제된 경우: 기기의 기억을 지우고 처음 화면으로
+// 학급 초기화/학생 삭제/선생님의 기기 초기화 시: 이 기기의 신원을 지우고 입장 화면으로.
+// 반 코드는 주소에 실어 보내서, 같은 반이면 코드 재입력 없이 바로 이름 선택 화면이 뜨게 한다.
 function leaveToGate() {
   localStorage.removeItem(ROLE_KEY);
   localStorage.removeItem(STUDENT_IDX_KEY);
-  location.href = 'index.html';
+  localStorage.removeItem(BIND_TOKEN_KEY);
+  location.href = classCode ? ('index.html?class=' + classCode) : 'index.html';
 }
 
 function bootstrapAvatar() {
@@ -322,6 +325,12 @@ function bootstrapAvatar() {
     if (snap.metadata.hasPendingWrites) return; // 내가 방금 쓴 내용의 메아리는 무시
     state = snap.data();
     if (role === 'student' && !isSeated(studentIdx)) { leaveToGate(); return; }
+    // 선생님이 이 자리의 기기 연결을 초기화(연결 회차 상승)했으면 스스로 로그아웃
+    if (role === 'student') {
+      const serverToken = (state.bindTokens && state.bindTokens[studentIdx]) || 0;
+      const myToken = parseInt(localStorage.getItem(BIND_TOKEN_KEY) || '0');
+      if (serverToken > myToken) { leaveToGate(); return; }
+    }
     init();
   }, () => showToast('⚠️ 서버 연결 오류! 인터넷을 확인해주세요.'));
 }
