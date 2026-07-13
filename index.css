@@ -1051,3 +1051,67 @@
   .gender-toggle button[data-g="boy"].active { background: var(--blue-btn); color: white; }
   .gender-toggle button[data-g="girl"].active { background: #FF9ED8; color: white; }
   .neis-selected-school { font-size: 13px; color: var(--card-border); font-weight: 700; margin-bottom: 12px; }
+
+  /* ===== 뽑기 (구슬 경주) ===== */
+  #raceView {
+    position: fixed;
+    top: 56px; left: 0; right: 0; bottom: 0;
+    z-index: 1;
+  }
+  #raceCanvas { display: block; width: 100%; height: 100%; }
+  .race-count-label {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--gold); font-size: 13px; font-weight: 700;
+  }
+  .race-count-label input {
+    width: 56px; padding: 6px 8px;
+    border-radius: 8px; border: 2px solid var(--card-border);
+    font-family: inherit; font-weight: 700; font-size: 13px; text-align: center;
+  }
+  .race-result-overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(40,25,10,0.55);
+  }
+  .race-result-box {
+    background: var(--card-bg);
+    border: 3px solid var(--card-border);
+    border-radius: 18px;
+    padding: 26px 40px;
+    text-align: center;
+    min-width: 320px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    animation: raceResultPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes raceResultPop {
+    0% { transform: scale(0.6); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .race-result-title { font-size: 26px; font-weight: 900; color: var(--card-border); margin-bottom: 14px; }
+  .race-result-list {
+    max-height: 52vh;
+    overflow-y: auto;
+    margin-bottom: 6px;
+    padding-right: 4px;
+  }
+  .race-result-item {
+    display: grid;
+    grid-template-columns: 58px 20px 1fr;
+    align-items: center; gap: 10px;
+    font-size: 16px; font-weight: 700; color: var(--navy);
+    padding: 5px 12px; border-radius: 8px;
+    text-align: left;
+  }
+  .race-result-item .race-rank { text-align: right; }
+  .race-result-item .race-name { text-align: left; }
+  .race-result-item.race-winner {
+    font-size: 20px; font-weight: 900;
+    background: rgba(255,217,102,0.35);
+    color: var(--card-border);
+  }
+  .race-result-item:not(.race-winner) { opacity: 0.72; }
+  .race-result-item .race-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.25);
+    display: inline-block;
+  }

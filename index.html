@@ -14,6 +14,7 @@
   <div class="tab-bar">
     <button class="tab-btn active" id="tabSeatBtn" type="button">🪑 자리 배치</button>
     <button class="tab-btn" id="tabScheduleBtn" type="button">📅 시간표·급식</button>
+    <button class="tab-btn" id="tabRaceBtn" type="button">🎲 뽑기</button>
     <button class="mini-qr" id="miniQrBtn" type="button" title="학생 입장 QR (클릭하면 크게 보여요)" style="display:none;">
       <img id="miniQrImg" alt="입장 QR">
       <span class="mini-qr-label">입장 QR</span>
@@ -30,6 +31,11 @@
   <div class="toolbar-btns" id="scheduleToolbarBtns" style="display:none;">
     <button class="btn green" id="neisSettingBtn">⚙️ 학교/학년반 설정</button>
     <button class="btn" id="scheduleRefreshBtn">🔄 새로고침</button>
+  </div>
+  <div class="toolbar-btns" id="raceToolbarBtns" style="display:none;">
+    <button class="btn green" id="racePickPlayersBtn">🙋 참가자 선택</button>
+    <label class="race-count-label">🏆 뽑을 인원 <input type="number" id="raceWinnerCount" min="1" value="1"></label>
+    <button class="btn" id="raceStartBtn">▶ 경주 시작</button>
   </div>
 </div>
 
@@ -49,7 +55,36 @@
   </div>
 </div>
 
+<div id="raceView" style="display:none;">
+  <canvas id="raceCanvas"></canvas>
+  <div class="race-result-overlay" id="raceResultOverlay" style="display:none;">
+    <div class="race-result-box">
+      <div class="race-result-title">🎉 당첨!</div>
+      <div class="race-result-list" id="raceResultList"></div>
+      <div class="modal-btns" style="justify-content:center;">
+        <button class="btn blue" id="raceCloseResultBtn" type="button">닫기</button>
+        <button class="btn" id="raceAgainBtn" type="button">🔁 다시 경주</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="racePlayersModal" style="display:none;">
+  <div class="modal-box wide">
+    <div class="modal-title">🙋 경주 참가자 선택</div>
+    <div class="modal-desc">체크된 학생만 구슬 경주에 참가해요.</div>
+    <div class="bulk-select-all">
+      <button class="btn blue" type="button" id="raceSelectAllBtn">전체 선택</button>
+      <button class="btn" type="button" id="raceSelectNoneBtn">전체 해제</button>
+    </div>
+    <div class="bulk-student-list" id="racePlayersList"></div>
+    <div class="modal-btns">
+      <button class="btn" id="raceCloseModalBtn" type="button">✅ 확인</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="settingModal" style="display:none;">
   <div class="modal-box">
@@ -222,5 +257,6 @@
 <script src="assets/items.js"></script>
 <script src="index.js"></script>
 <script src="schedule.js"></script>
+<script src="race.js"></script>
 </body>
 </html>

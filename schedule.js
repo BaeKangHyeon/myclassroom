@@ -23,19 +23,23 @@ function saveNeisSettings(settings) {
   localStorage.setItem(NEIS_STORAGE_KEY, JSON.stringify(settings));
 }
 
-// ===== 탭 전환 =====
+// ===== 탭 전환 (자리 배치 / 시간표·급식 / 뽑기) =====
 function switchTab(tab) {
-  const isSeat = tab === 'seat';
-  document.getElementById('tabSeatBtn').classList.toggle('active', isSeat);
-  document.getElementById('tabScheduleBtn').classList.toggle('active', !isSeat);
-  document.getElementById('canvas').style.display = isSeat ? '' : 'none';
-  document.getElementById('scheduleView').style.display = isSeat ? 'none' : 'block';
-  document.getElementById('seatToolbarBtns').style.display = isSeat ? '' : 'none';
-  document.getElementById('scheduleToolbarBtns').style.display = isSeat ? 'none' : '';
-  if (!isSeat) renderScheduleView();
+  document.getElementById('tabSeatBtn').classList.toggle('active', tab === 'seat');
+  document.getElementById('tabScheduleBtn').classList.toggle('active', tab === 'schedule');
+  document.getElementById('tabRaceBtn').classList.toggle('active', tab === 'race');
+  document.getElementById('canvas').style.display = tab === 'seat' ? '' : 'none';
+  document.getElementById('scheduleView').style.display = tab === 'schedule' ? 'block' : 'none';
+  document.getElementById('raceView').style.display = tab === 'race' ? 'block' : 'none';
+  document.getElementById('seatToolbarBtns').style.display = tab === 'seat' ? '' : 'none';
+  document.getElementById('scheduleToolbarBtns').style.display = tab === 'schedule' ? '' : 'none';
+  document.getElementById('raceToolbarBtns').style.display = tab === 'race' ? '' : 'none';
+  if (tab === 'schedule') renderScheduleView();
+  if (tab === 'race' && typeof onRaceTabOpen === 'function') onRaceTabOpen();
 }
 document.getElementById('tabSeatBtn').addEventListener('click', () => switchTab('seat'));
 document.getElementById('tabScheduleBtn').addEventListener('click', () => switchTab('schedule'));
+document.getElementById('tabRaceBtn').addEventListener('click', () => switchTab('race'));
 
 // ===== 학교 검색/설정 모달 (급식 조회용) =====
 let neisPickedSchool = null;
