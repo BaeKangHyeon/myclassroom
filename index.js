@@ -274,10 +274,12 @@ function deskAvatarHtml(studentIdx) {
   }
   const bgImg = layers.background ? `<img class="desk-bg" src="${layers.background}" alt="">` : '';
   const overlayImg = layers.overlay ? `<img src="${layers.overlay}" alt="">` : '';
+  const hairImg = layers.hair ? `<img src="${layers.hair}" alt="">` : '';
   return `<div class="desk-avatar" data-idx="${studentIdx}" title="내 아바타 꾸미기">
     ${bgImg}
     <img src="${layers.base}" alt="">
     ${overlayImg}
+    ${hairImg}
   </div>`;
 }
 

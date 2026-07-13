@@ -44,18 +44,21 @@ function availableCoins(idx) {
 
 function ensureAvatarShape(avatar) {
   if (!avatar.inventory) avatar.inventory = ['outfit_basic'];
+  const defHair = defaultHairId(avatar.gender);
+  if (defHair && !avatar.inventory.includes(defHair)) avatar.inventory.push(defHair);
   if (!avatar.inventory.includes('bg_none')) avatar.inventory.push('bg_none');
   if (!avatar.inventory.includes('frame_none')) avatar.inventory.push('frame_none');
   if (!avatar.inventory.includes('title_none')) avatar.inventory.push('title_none');
   if (!avatar.equipped) avatar.equipped = { outfit: 'outfit_basic' };
   if (!avatar.equipped.outfit) avatar.equipped.outfit = 'outfit_basic';
+  if (!avatar.equipped.hair && defHair) avatar.equipped.hair = defHair;
   if (!avatar.equipped.background) avatar.equipped.background = 'bg_none';
   if (!avatar.equipped.frame) avatar.equipped.frame = 'frame_none';
   if (!avatar.equipped.title) avatar.equipped.title = 'title_none';
 }
 
 function findCatalogItem(id) {
-  return ITEMS.find(i => i.id === id) || BACKGROUNDS.find(b => b.id === id) || FRAMES.find(f => f.id === id) || TITLES.find(t => t.id === id);
+  return ITEMS.find(i => i.id === id) || HAIRSTYLES.find(h => h.id === id) || BACKGROUNDS.find(b => b.id === id) || FRAMES.find(f => f.id === id) || TITLES.find(t => t.id === id);
 }
 
 function init() {
@@ -116,6 +119,21 @@ function renderAvatar() {
     outfitImg.style.display = 'none';
   }
 
+  // 머리 레이어 (옷 위에 그림). 착용한 머리가 이 성별 이미지를 안 가지면 성별 기본 머리로 되돌림.
+  const hairImg = document.getElementById('avatarHairImg');
+  let hs = HAIRSTYLES.find(h => h.id === avatar.equipped.hair);
+  if (!hs || !hs.images[avatar.gender]) {
+    avatar.equipped.hair = defaultHairId(avatar.gender);
+    hs = HAIRSTYLES.find(h => h.id === avatar.equipped.hair);
+  }
+  if (hs && hs.images[avatar.gender]) {
+    hairImg.src = hs.images[avatar.gender];
+    hairImg.style.display = 'block';
+  } else {
+    hairImg.src = '';
+    hairImg.style.display = 'none';
+  }
+
   const fr = FRAMES.find(f => f.id === avatar.equipped.frame);
   const corners = ['frameTL', 'frameTR', 'frameBL', 'frameBR'].map(id => document.getElementById(id));
   corners.forEach(el => {
@@ -171,10 +189,12 @@ function renderItemGrid() {
   const catalog = currentCategory === 'background' ? BACKGROUNDS
     : currentCategory === 'frame' ? FRAMES
     : currentCategory === 'title' ? TITLES
+    : currentCategory === 'hair' ? hairForGender(avatar.gender)
     : itemsForGender(avatar.gender);
   const emptyMsg = currentCategory === 'background' ? '아직 보유한 배경이 없어요. 상점에서 구매해보세요!'
     : currentCategory === 'frame' ? '아직 보유한 테두리가 없어요. 상점에서 구매해보세요!'
     : currentCategory === 'title' ? '아직 보유한 칭호가 없어요. 상점에서 구매해보세요!'
+    : currentCategory === 'hair' ? (currentTab === 'shop' ? '아직 준비된 머리 스타일이 없어요.' : '아직 보유한 머리 스타일이 없어요. 상점에서 구매해보세요!')
     : '아직 보유한 옷이 없어요. 상점에서 구매해보세요!';
 
   let items = catalog;
@@ -214,7 +234,7 @@ function renderItemGrid() {
         : `<button class="btn" data-action="equip" data-id="${item.id}">장착</button>`;
     }
 
-    const iconSrc = currentCategory === 'outfit' ? item.images[avatar.gender] : item.image;
+    const iconSrc = (currentCategory === 'outfit' || currentCategory === 'hair') ? item.images[avatar.gender] : item.image;
     card.innerHTML = `
       <div class="item-icon">${iconSrc ? `<img src="${iconSrc}" alt="">` : ''}</div>
       <div class="item-name">${item.name}</div>
@@ -260,6 +280,8 @@ function equipItem(id) {
     avatar.equipped.frame = id;
   } else if (TITLES.some(t => t.id === id)) {
     avatar.equipped.title = id;
+  } else if (HAIRSTYLES.some(h => h.id === id)) {
+    avatar.equipped.hair = id;
   } else {
     avatar.equipped.outfit = id;
   }

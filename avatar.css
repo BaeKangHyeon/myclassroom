@@ -130,7 +130,7 @@
     60% { transform: translateY(3px) scaleY(0.94); }
     80% { transform: translateY(-3px) scaleY(1.03); }
   }
-  #avatarBaseImg, #avatarOutfitImg, #avatarBgImg {
+  #avatarBaseImg, #avatarOutfitImg, #avatarHairImg, #avatarBgImg {
     position: absolute;
     top: 0; left: 0;
     width: 100%;
@@ -139,6 +139,7 @@
   }
   #avatarBgImg { z-index: 0; object-fit: cover; }
   #avatarBaseImg { z-index: 1; }
+  #avatarHairImg { z-index: 3; }
   .frame-corner {
     position: absolute;
     width: 56px;
