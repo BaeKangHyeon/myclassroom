@@ -34,6 +34,7 @@ function switchTab(tab) {
   document.getElementById('seatToolbarBtns').style.display = tab === 'seat' ? '' : 'none';
   document.getElementById('scheduleToolbarBtns').style.display = tab === 'schedule' ? '' : 'none';
   document.getElementById('raceToolbarBtns').style.display = tab === 'race' ? '' : 'none';
+  document.getElementById('raceMapToggle').style.display = tab === 'race' ? 'inline-flex' : 'none';
   if (tab === 'schedule') renderScheduleView();
   if (tab === 'race' && typeof onRaceTabOpen === 'function') onRaceTabOpen();
 }

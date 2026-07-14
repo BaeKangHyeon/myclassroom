@@ -21,6 +21,45 @@ const MARBLE_COLORS = [
   '#FFC97A', '#B0C4FF', '#D0E060', '#FFA0C8', '#8FD8FF', '#F0B860'
 ];
 
+// 맵별 못(peg) 이미지: 큰 원본을 매번 그리면 느려서, 로드 때 한 번만
+// 작은 원형 캔버스로 축소해두고 (회색 배경은 투명 처리) 그걸 그린다.
+const PEG_SKINS = { classic: 'assets/1.png', seesaw: 'assets/2.png', storm: 'assets/3.png' };
+const pegSkinCanvas = {};
+for (const key of Object.keys(PEG_SKINS)) {
+  const img = new Image();
+  img.onload = () => {
+    const s = 64;
+    // 1단계: 원본에 그려진 지저분한 테두리 원이 안 들어오게 깊게(16%) 잘라내고,
+    //         배경으로 깔린 회색(무채색 중간 밝기)을 투명 처리
+    const tmp = document.createElement('canvas');
+    tmp.width = tmp.height = s;
+    const tc = tmp.getContext('2d');
+    tc.beginPath(); tc.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); tc.clip();
+    const m = img.width * 0.16;
+    tc.drawImage(img, m, m, img.width - m * 2, img.height - m * 2, 0, 0, s, s);
+    const d = tc.getImageData(0, 0, s, s);
+    const px = d.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const r = px[i], g = px[i + 1], b = px[i + 2];
+      if (Math.abs(r - g) < 14 && Math.abs(g - b) < 14 && r > 90 && r < 215) px[i + 3] = 0;
+    }
+    tc.putImageData(d, 0, 0);
+    // 2단계: 크림색 바탕 원 + 캐릭터 + 깔끔한 갈색 테두리 원으로 토큰 완성
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = s;
+    const cx = cv.getContext('2d');
+    cx.beginPath(); cx.arc(s / 2, s / 2, s / 2 - 1.5, 0, Math.PI * 2);
+    cx.fillStyle = '#FFF8E7'; cx.fill();
+    cx.save(); cx.clip(); cx.drawImage(tmp, 0, 0); cx.restore();
+    cx.beginPath(); cx.arc(s / 2, s / 2, s / 2 - 2, 0, Math.PI * 2);
+    cx.lineWidth = 4; cx.strokeStyle = '#C8860C'; cx.stroke();
+    pegSkinCanvas[key] = cv;
+    // 상단 맵 선택 버튼의 아이콘에도 같은 토큰을 사용
+    document.querySelectorAll('img[data-mapicon="' + key + '"]').forEach(el => { el.src = cv.toDataURL(); });
+  };
+  img.src = PEG_SKINS[key];
+}
+
 let raceExcluded = new Set();  // 참가자 선택 모달에서 체크 해제한 학생 idx
 let race = null;               // 진행 중인 경주 전체 상태 (null이면 대기 화면)
 let raceAnimId = 0;
@@ -53,8 +92,9 @@ function seg(x1, y1, x2, y2) {
 
 // ---------- 코스 생성 ----------
 // 매 경주마다 못 위치·깔때기 구멍·구간 순서가 조금씩 달라져서 결과 예측이 안 된다.
-function buildCourse(n) {
-  const walls = [], pegs = [];
+function buildCourse(n, mapType) {
+  // 코스 구성요소를 한 객체(c)에 모아 구간 함수에 넘긴다.
+  const c = { walls: [], pegs: [], spinners: [], seesaws: [], pendulums: [] };
   const W = RACE_W;
 
   // 시작 구역: 구슬들이 줄지어 놓일 공간
@@ -63,27 +103,38 @@ function buildCourse(n) {
   let y = 100 + startRows * 34;
 
   // 시작 깔때기: 전체 폭을 가운데로 모아줌
-  walls.push(seg(0, y, W / 2 - 140, y + 170));
-  walls.push(seg(W, y, W / 2 + 140, y + 170));
+  c.walls.push(seg(0, y, W / 2 - 140, y + 170));
+  c.walls.push(seg(W, y, W / 2 + 140, y + 170));
   y += 200;
 
   // 본 코스: 구간들을 무작위 순서로 이어붙임 (짧게 유지해 한 판이 오래 안 걸리게)
-  const sections = rShuffle(['pegs', 'zigzag', 'funnel']);
-  sections.push('pegs'); // 마지막은 항상 못 구간 (결승 직전 마지막 뒤섞기)
-  for (const s of sections) y = addSection(s, y, walls, pegs);
+  let sections;
+  if (mapType === 'storm') {
+    // 폭풍 맵: 회전 막대가 곳곳에서 구슬을 튕겨내 순위가 계속 뒤집힌다.
+    sections = rShuffle(['pegs', 'spinner', 'zigzag', 'funnel']);
+    sections.push('windmill'); // 피날레: 가운데로 모아 큰 바람개비에 반드시 맞게 한다
+  } else if (mapType === 'seesaw') {
+    // 시소·진자 맵: 시소가 무게에 따라 기울고 진자가 후려쳐 역전이 잦다.
+    sections = rShuffle(['seesaw', 'pendulum', 'miniseesaw', 'seesaw', 'miniseesaw', 'pendulum']);
+    sections.push('pegs'); // 결승 직전 마지막 뒤섞기
+  } else {
+    sections = rShuffle(['pegs', 'zigzag', 'funnel']);
+    sections.push('pegs');
+  }
+  for (const s of sections) y = addSection(s, y, c);
 
   const finishY = y + 220;
   const height = finishY + 260;
 
   // 양옆 벽 + 바닥
-  walls.push(seg(0, 0, 0, height));
-  walls.push(seg(W, 0, W, height));
-  walls.push(seg(0, height - 10, W, height - 10));
+  c.walls.push(seg(0, 0, 0, height));
+  c.walls.push(seg(W, 0, W, height));
+  c.walls.push(seg(0, height - 10, W, height - 10));
 
-  return { walls, pegs, finishY, height, startCols, startRows };
+  return { ...c, mapType, finishY, height, startCols, startRows };
 }
 
-function addSection(type, y, walls, pegs) {
+function addSection(type, y, c) {
   const W = RACE_W;
   if (type === 'pegs') {
     // 못 격자 (플링코): 줄마다 반 칸씩 엇갈리고, 위치가 조금씩 흔들림
@@ -91,7 +142,7 @@ function addSection(type, y, walls, pegs) {
     for (let r = 0; r < rows; r++) {
       const offset = (r % 2) ? 45 : 0;
       for (let x = 60 + offset; x < W - 40; x += 90) {
-        pegs.push({ x: x + rRand(-12, 12), y: y + 90 + r * 78 + rRand(-8, 8), r: 9 });
+        c.pegs.push({ x: x + rRand(-12, 12), y: y + 90 + r * 78 + rRand(-8, 8), r: 16 });
       }
     }
     return y + 90 + rows * 78 + 50;
@@ -102,19 +153,97 @@ function addSection(type, y, walls, pegs) {
     const startLeft = Math.random() < 0.5;
     for (let i = 0; i < 3; i++) {
       const fromLeft = startLeft ? (i % 2 === 0) : (i % 2 === 1);
-      if (fromLeft) walls.push(seg(0, yy, W - 190, yy + 130));
-      else walls.push(seg(W, yy, 190, yy + 130));
+      if (fromLeft) c.walls.push(seg(0, yy, W - 190, yy + 130));
+      else c.walls.push(seg(W, yy, 190, yy + 130));
       yy += 195;
     }
     return yy + 45;
   }
+  if (type === 'spinner') {
+    // 회전 막대: 중심축을 기준으로 도는 팔이 구슬을 사방으로 튕겨낸다 (폭풍 맵)
+    const count = Math.random() < 0.45 ? 1 : 2;
+    for (let i = 0; i < count; i++) {
+      const cxs = count === 1 ? W / 2 + rRand(-60, 60)
+                              : (i === 0 ? W * 0.30 : W * 0.70);
+      c.spinners.push({
+        cx: cxs, cy: y + 150,
+        len: rRand(95, 135), half: 9,
+        arms: Math.random() < 0.5 ? 2 : 3,
+        angle: rRand(0, Math.PI * 2),
+        omega: rRand(1.8, 3.4) * (Math.random() < 0.5 ? -1 : 1)
+      });
+    }
+    return y + 320;
+  }
+  if (type === 'windmill') {
+    // 피날레: 가운데로 모으는 넓은 깔때기 아래 정중앙 큰 바람개비.
+    // 목(gap)을 넓게 두고 회전팔은 목 아래에 둬서, 끼임 없이 모든 구슬이 바람개비에 맞고 튄다.
+    const cx = W / 2, gap = 200;
+    c.walls.push(seg(0, y + 20, cx - gap / 2, y + 190));
+    c.walls.push(seg(W, y + 20, cx + gap / 2, y + 190));
+    c.spinners.push({
+      cx, cy: y + 345, len: 135, half: 12, arms: 4,
+      angle: rRand(0, Math.PI * 2),
+      omega: rRand(2.2, 3.2) * (Math.random() < 0.5 ? -1 : 1)
+    });
+    return y + 520;
+  }
+  if (type === 'seesaw') {
+    // 시소 2개를 좌우에 높이를 엇갈려 배치해 전체 폭을 빈틈없이 덮는다.
+    // 어느 쪽으로 떨어져도 반드시 시소 판 위에 착지 → 무게로 기울면 한쪽으로 쏟아짐.
+    // 양끝 벽에 붙어 내려오는 구슬은 짧은 턱으로 안쪽으로 밀어 넣는다.
+    c.walls.push(seg(0, y, 70, y + 90));
+    c.walls.push(seg(W, y, W - 70, y + 90));
+    const leftHigh = Math.random() < 0.5;
+    c.seesaws.push({
+      cx: W * 0.27 + rRand(-10, 10), cy: y + (leftHigh ? 140 : 260),
+      len: 200, half: 10,
+      angle: rRand(-0.15, 0.15), omega: 0, maxTilt: 0.55
+    });
+    c.seesaws.push({
+      cx: W * 0.73 + rRand(-10, 10), cy: y + (leftHigh ? 260 : 140),
+      len: 200, half: 10,
+      angle: rRand(-0.15, 0.15), omega: 0, maxTilt: 0.55
+    });
+    return y + 440;
+  }
+  if (type === 'pendulum') {
+    // 진자 2개가 좌·우에서 반대 방향으로 스윙하며 넓게 휩쓴다.
+    c.walls.push(seg(0, y, 70, y + 90));
+    c.walls.push(seg(W, y, W - 70, y + 90));
+    for (let i = 0; i < 2; i++) {
+      c.pendulums.push({
+        px: W * (i === 0 ? 0.3 : 0.7) + rRand(-20, 20), py: y + 20,
+        L: rRand(160, 185), r: 28,
+        // 큰 각도에서 놓아 진폭을 크게 유지(감쇠 없음), 서로 반대 방향에서 시작
+        theta: rRand(0.9, 1.15) * (i === 0 ? -1 : 1),
+        thetaDot: 0
+      });
+    }
+    return y + 360;
+  }
+  if (type === 'miniseesaw') {
+    // 작은 시소 3개가 좌·중·우에 흩어져 있다. 판이 짧아 조금만 무거워도 홱 뒤집혀
+    // 구슬을 예측 못 할 방향으로 쏟아낸다.
+    c.walls.push(seg(0, y, 70, y + 90));
+    c.walls.push(seg(W, y, W - 70, y + 90));
+    for (let i = 0; i < 3; i++) {
+      c.seesaws.push({
+        cx: W * (0.2 + 0.3 * i) + rRand(-25, 25),
+        cy: y + (i === 1 ? 210 : 120) + rRand(-15, 15), // 가운데만 낮춰 지그재그로 통과
+        len: rRand(95, 115), half: 9,
+        angle: rRand(-0.2, 0.2), omega: 0, maxTilt: 0.65
+      });
+    }
+    return y + 340;
+  }
   // funnel: 좁은 구멍 하나로만 통과 (병목에서 순위가 뒤집힘)
   const gap = 95;
   const cx = rRand(W * 0.3, W * 0.7);
-  walls.push(seg(0, y + 40, cx - gap / 2, y + 210));
-  walls.push(seg(W, y + 40, cx + gap / 2, y + 210));
-  walls.push(seg(cx - gap / 2, y + 210, cx - gap / 2, y + 255));
-  walls.push(seg(cx + gap / 2, y + 210, cx + gap / 2, y + 255));
+  c.walls.push(seg(0, y + 40, cx - gap / 2, y + 210));
+  c.walls.push(seg(W, y + 40, cx + gap / 2, y + 210));
+  c.walls.push(seg(cx - gap / 2, y + 210, cx - gap / 2, y + 255));
+  c.walls.push(seg(cx + gap / 2, y + 210, cx + gap / 2, y + 255));
   return y + 320;
 }
 
@@ -130,7 +259,8 @@ function startRace() {
   cntInput.value = winnersNeeded;
 
   fitRaceCanvas(); // 탭 전환 직후 등 캔버스 크기가 안 잡혀 있을 수 있어 시작 때마다 다시 맞춤
-  const course = buildCourse(players.length);
+  const activeMap = document.querySelector('.map-opt.active');
+  const course = buildCourse(players.length, activeMap ? activeMap.dataset.map : 'storm');
 
   // 출발 위치: 순서를 섞어서 격자로 배치 (자리 순서 유리함 없음)
   const shuffled = rShuffle([...players]);
@@ -169,9 +299,36 @@ function stopRace() {
 }
 
 // ---------- 물리 ----------
+// 움직이는 장애물(회전 막대·시소·진자)을 한 서브스텝(h초)만큼 진행시킨다.
+function updateObstacles(r, h) {
+  const c = r.course;
+  if (c.spinners) for (const sp of c.spinners) sp.angle += sp.omega * h;
+
+  if (c.pendulums) for (const pd of c.pendulums) {
+    // 단진자: θ'' = -(g/L)·sinθ (감쇠 없이 계속 흔들림)
+    pd.thetaDot += (-(GRAV / pd.L) * Math.sin(pd.theta)) * h;
+    pd.theta += pd.thetaDot * h;
+  }
+
+  if (c.seesaws) for (const sw of c.seesaws) {
+    // 시소 위(축 주변)에 올라탄 구슬들의 무게로 토크 계산 → 무거운 쪽으로 기운다.
+    let torque = 0;
+    for (const m of r.marbles) {
+      if (m.finished || Math.abs(m.x - sw.cx) > sw.len) continue;
+      if (m.y > sw.cy - 55 && m.y < sw.cy + 35) torque += (m.x - sw.cx) / sw.len;
+    }
+    // 무게토크 + 복원(수평으로) + 감쇠 — 작은 무게 차이에도 확 기울도록 토크를 크게, 복원은 약하게
+    sw.omega += (torque * 14 - sw.angle * 2.2 - sw.omega * 2.6) * h;
+    sw.angle += sw.omega * h;
+    if (sw.angle > sw.maxTilt) { sw.angle = sw.maxTilt; sw.omega *= -0.2; }
+    if (sw.angle < -sw.maxTilt) { sw.angle = -sw.maxTilt; sw.omega *= -0.2; }
+  }
+}
+
 function stepPhysics(r, dt) {
   const h = (dt / SUBSTEPS) * r.timeScale;
   for (let s = 0; s < SUBSTEPS; s++) {
+    updateObstacles(r, h);
     for (const m of r.marbles) {
       if (m.finished) continue;
       m.vy += GRAV * h;
@@ -202,7 +359,7 @@ function stepPhysics(r, dt) {
 }
 
 function collideAll(r) {
-  const { walls, pegs } = r.course;
+  const { walls, pegs, spinners, seesaws, pendulums } = r.course;
   const ms = r.marbles;
 
   for (const m of ms) {
@@ -214,6 +371,38 @@ function collideAll(r) {
     for (const p of pegs) {
       if (Math.abs(m.y - p.y) > 40) continue;
       collideCircle(m, p, REST_PEG);
+    }
+    if (spinners) {
+      for (const sp of spinners) {
+        if (Math.abs(m.y - sp.cy) > sp.len + 40) continue;
+        collideCircle(m, { x: sp.cx, y: sp.cy, r: sp.half + 5 }, REST_PEG); // 중심 허브
+        for (let k = 0; k < sp.arms; k++) {
+          const a = sp.angle + k * (Math.PI * 2 / sp.arms);
+          collideMovingSeg(m, sp.cx, sp.cy,
+            sp.cx + Math.cos(a) * sp.len, sp.cy + Math.sin(a) * sp.len,
+            sp.cx, sp.cy, sp.omega, sp.half, REST_PEG);
+        }
+      }
+    }
+    if (seesaws) {
+      for (const sw of seesaws) {
+        if (Math.abs(m.y - sw.cy) > sw.len + 40) continue;
+        const ca = Math.cos(sw.angle), sa = Math.sin(sw.angle);
+        collideMovingSeg(m, sw.cx - ca * sw.len, sw.cy - sa * sw.len,
+          sw.cx + ca * sw.len, sw.cy + sa * sw.len,
+          sw.cx, sw.cy, sw.omega, sw.half, REST_WALL);
+      }
+    }
+    if (pendulums) {
+      for (const pd of pendulums) {
+        const bx = pd.px + Math.sin(pd.theta) * pd.L;
+        const by = pd.py + Math.cos(pd.theta) * pd.L;
+        if (Math.abs(m.y - by) > pd.r + 40) continue;
+        // 추의 순간 속도 (v = d/dt of 위치)
+        const bvx = Math.cos(pd.theta) * pd.thetaDot * pd.L;
+        const bvy = -Math.sin(pd.theta) * pd.thetaDot * pd.L;
+        collideMovingCircle(m, bx, by, pd.r, bvx, bvy, REST_PEG);
+      }
     }
   }
 
@@ -261,6 +450,43 @@ function collideSeg(m, s, rest) {
     m.vx -= (1 + rest) * vn * nx;
     m.vy -= (1 + rest) * vn * ny;
     m.vx *= 0.995; m.vy *= 0.995; // 벽 타고 미끄러질 때 마찰
+  }
+}
+
+// 회전하는 막대(움직이는 선분)와의 충돌: 접점의 표면 속도를 반영해 구슬을 튕겨낸다.
+function collideMovingSeg(m, x1, y1, x2, y2, cx, cy, omega, half, rest) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy || 1;
+  let t = ((m.x - x1) * dx + (m.y - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const px = x1 + t * dx, py = y1 + t * dy;
+  let nx = m.x - px, ny = m.y - py;
+  const d = Math.hypot(nx, ny);
+  if (d >= MARBLE_R + half) return;
+  if (d < 0.0001) { nx = 0; ny = -1; } else { nx /= d; ny /= d; }
+  m.x += nx * (MARBLE_R + half - d);
+  m.y += ny * (MARBLE_R + half - d);
+  // 접점에서 막대 표면이 도는 속도 (v = ω × r). 이걸 반영해야 구슬이 튕겨 날아간다.
+  const svx = -omega * (py - cy), svy = omega * (px - cx);
+  const rvn = (m.vx - svx) * nx + (m.vy - svy) * ny; // 표면 대비 상대 속도의 법선 성분
+  if (rvn < 0) {
+    const j = (1 + rest) * rvn;
+    m.vx -= j * nx; m.vy -= j * ny;
+  }
+}
+
+// 움직이는 원(진자 추)과의 충돌: 추의 순간 속도를 반영해 구슬을 후려친다.
+function collideMovingCircle(m, cx, cy, cr, cvx, cvy, rest) {
+  let nx = m.x - cx, ny = m.y - cy;
+  const d = Math.hypot(nx, ny);
+  if (d >= MARBLE_R + cr || d === 0) return;
+  nx /= d; ny /= d;
+  m.x += nx * (MARBLE_R + cr - d);
+  m.y += ny * (MARBLE_R + cr - d);
+  const rvn = (m.vx - cvx) * nx + (m.vy - cvy) * ny;
+  if (rvn < 0) {
+    const j = (1 + rest) * rvn;
+    m.vx -= j * nx; m.vy -= j * ny;
   }
 }
 
@@ -390,12 +616,73 @@ function drawRace(r) {
     ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
   }
 
-  // 못
+  // 못: 맵별 캐릭터 이미지 (아직 로드 전이면 기존 노란 원)
+  const pegSkin = pegSkinCanvas[r.course.mapType];
   for (const p of r.course.pegs) {
     if (p.y < viewTop || p.y > viewBot) continue;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fillStyle = '#FFD966'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = '#C8860C'; ctx.stroke();
+    if (pegSkin) {
+      ctx.drawImage(pegSkin, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+    } else {
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFD966'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#C8860C'; ctx.stroke();
+    }
+  }
+
+  // 회전 막대 (폭풍 맵)
+  if (r.course.spinners) {
+    for (const sp of r.course.spinners) {
+      if (sp.cy + sp.len < viewTop || sp.cy - sp.len > viewBot) continue;
+      ctx.save();
+      ctx.translate(sp.cx, sp.cy);
+      ctx.strokeStyle = '#E0662E';
+      ctx.lineWidth = sp.half * 2;
+      ctx.lineCap = 'round';
+      for (let k = 0; k < sp.arms; k++) {
+        ctx.save();
+        ctx.rotate(sp.angle + k * (Math.PI * 2 / sp.arms));
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(sp.len, 0); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.beginPath(); ctx.arc(0, 0, sp.half + 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#7A3E12'; ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // 시소 (시소·진자 맵)
+  if (r.course.seesaws) {
+    for (const sw of r.course.seesaws) {
+      if (sw.cy + 60 < viewTop || sw.cy - 60 > viewBot) continue;
+      const ca = Math.cos(sw.angle), sa = Math.sin(sw.angle);
+      ctx.strokeStyle = '#3FA9C9'; ctx.lineWidth = sw.half * 2; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(sw.cx - ca * sw.len, sw.cy - sa * sw.len);
+      ctx.lineTo(sw.cx + ca * sw.len, sw.cy + sa * sw.len);
+      ctx.stroke();
+      ctx.fillStyle = '#8A5220'; // 받침(삼각형)
+      ctx.beginPath();
+      ctx.moveTo(sw.cx, sw.cy + 4);
+      ctx.lineTo(sw.cx - 20, sw.cy + 44);
+      ctx.lineTo(sw.cx + 20, sw.cy + 44);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  // 진자 (시소·진자 맵)
+  if (r.course.pendulums) {
+    for (const pd of r.course.pendulums) {
+      const bx = pd.px + Math.sin(pd.theta) * pd.L;
+      const by = pd.py + Math.cos(pd.theta) * pd.L;
+      if (by + pd.r < viewTop || pd.py - 20 > viewBot) continue;
+      ctx.strokeStyle = '#9A7B5A'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(pd.px, pd.py); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.fillStyle = '#5A3A1A'; // 천장 고정점
+      ctx.beginPath(); ctx.arc(pd.px, pd.py, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(bx, by, pd.r, 0, Math.PI * 2); // 추
+      ctx.fillStyle = '#C0508A'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#7A2050'; ctx.stroke();
+    }
   }
 
   // 구슬 + 이름표
@@ -419,20 +706,23 @@ function drawRace(r) {
   // ----- 화면 고정 UI (카메라 무시) -----
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // 순위판 (결승 통과자)
+  // 순위판 (결승 통과자) — 전원 표시. 인원이 많으면 줄 간격·글씨를 줄여 화면 안에 다 들어가게.
   if (r.ranks.length) {
     const medals = ['🥇', '🥈', '🥉'];
+    const rowH = Math.max(14, Math.min(26, (chPx - 44) / r.ranks.length));
+    const fs = Math.round(Math.min(16, rowH * 0.62));
+    const dotR = Math.min(7, rowH * 0.28);
     ctx.textAlign = 'left';
-    ctx.font = '900 16px "Noto Sans KR", sans-serif';
-    const shown = r.ranks.slice(0, 8);
+    ctx.font = `900 ${fs}px "Noto Sans KR", sans-serif`;
     ctx.fillStyle = 'rgba(40,25,10,0.72)';
-    ctx.fillRect(12, 12, 190, 20 + shown.length * 26);
-    shown.forEach((rk, i) => {
+    ctx.fillRect(12, 12, 190, 20 + r.ranks.length * rowH);
+    r.ranks.forEach((rk, i) => {
+      const cy = 22 + i * rowH + rowH / 2;
       const label = (medals[i] || `${i + 1}등`) + ' ' + rk.name;
       ctx.fillStyle = rk.color;
-      ctx.beginPath(); ctx.arc(30, 34 + i * 26, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(30, cy, dotR, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = i < r.winnersNeeded ? '#FFD966' : 'rgba(255,255,255,0.7)';
-      ctx.fillText(label, 44, 40 + i * 26);
+      ctx.fillText(label, 44, cy + fs * 0.36);
     });
   }
 
@@ -545,6 +835,14 @@ window.addEventListener('resize', () => {
   if (document.getElementById('raceView').style.display === 'none') return;
   fitRaceCanvas();
   if (!race) drawIdle();
+});
+
+document.querySelectorAll('.map-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.map-opt').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    if (!race) drawIdle();
+  });
 });
 
 document.getElementById('raceStartBtn').addEventListener('click', startRace);

@@ -940,6 +940,51 @@
     image-rendering: pixelated; /* 축소해도 QR이 흐려지지 않게 */
   }
   .mini-qr-label { font-size: 11px; font-weight: 900; color: var(--toolbar-bg); white-space: nowrap; }
+  /* 뽑기 맵 선택 토글 (탭 바, QR 왼쪽) */
+  .map-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 10px;
+    padding: 3px;
+    background: white;
+    border: 2px solid var(--toolbar-border);
+    border-radius: 11px;
+    box-shadow: 0 2px 0 #C8860C;
+    animation: mapToggleGlow 2.2s ease-in-out infinite;
+  }
+  @keyframes mapToggleGlow {
+    0%, 100% { box-shadow: 0 2px 0 #C8860C, 0 0 0 0 rgba(255,217,102,0); }
+    50%      { box-shadow: 0 2px 0 #C8860C, 0 0 10px 2px rgba(255,217,102,0.75); }
+  }
+  .map-toggle-cap {
+    font-size: 11px; font-weight: 900; color: var(--toolbar-bg);
+    padding: 0 3px 0 5px; white-space: nowrap;
+  }
+  .map-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #A0622A;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform 0.1s, background 0.12s, box-shadow 0.12s;
+  }
+  .map-opt-icon { width: 20px; height: 20px; display: block; }
+  .map-opt:hover { background: rgba(255,140,66,0.15); }
+  .map-opt.active {
+    background: linear-gradient(180deg, #FFB65C, var(--orange));
+    color: white;
+    box-shadow: inset 0 0 0 2px #FFD966, 0 2px 5px rgba(224,92,0,0.4);
+  }
+  .map-opt:active { transform: translateY(1px); }
   .big-qr {
     width: 280px; height: 280px;
     max-width: 70vw;
