@@ -17,6 +17,7 @@ let state = null;
 let docRef = null;
 let currentTab = 'shop';
 let currentCategory = 'outfit';
+let previewId = null; // 상점에서 미리보기(구매 전 입어보기) 중인 아이템 id. currentCategory 슬롯에 임시 적용.
 
 // 내 아바타와 쓴 금액만 콕 집어 저장한다.
 // (문서 전체를 덮어쓰지 않으므로 선생님이 동시에 점수를 바꿔도 서로 안 지워짐)
@@ -94,12 +95,21 @@ function render() {
 
 function renderAvatar() {
   const avatar = state.avatars[studentIdx];
+  // 상점에서 미리보기 중이면, 실제 착용값(avatar.equipped)은 그대로 두고 임시 사본으로만 그린다.
+  let eq = avatar.equipped;
+  if (previewId && currentTab === 'shop') {
+    eq = Object.assign({}, avatar.equipped);
+    eq[currentCategory] = previewId;
+  }
   const baseImg = document.getElementById('avatarBaseImg');
   const outfitImg = document.getElementById('avatarOutfitImg');
   const bgImg = document.getElementById('avatarBgImg');
   baseImg.src = GENDER_IMAGES[avatar.gender];
 
-  const bg = BACKGROUNDS.find(b => b.id === avatar.equipped.background);
+  document.getElementById('previewBadge').style.display =
+    (previewId && currentTab === 'shop') ? 'block' : 'none';
+
+  const bg = BACKGROUNDS.find(b => b.id === eq.background);
   if (bg && bg.image) {
     bgImg.src = bg.image;
     bgImg.style.display = 'block';
@@ -108,23 +118,23 @@ function renderAvatar() {
     bgImg.style.display = 'none';
   }
 
-  const item = ITEMS.find(i => i.id === avatar.equipped.outfit);
+  const item = ITEMS.find(i => i.id === eq.outfit);
   // if equipped outfit has no image for this gender (e.g. after switching gender), fall back to basic
   if (item && item.id !== 'outfit_basic' && item.images[avatar.gender]) {
     outfitImg.src = item.images[avatar.gender];
     outfitImg.style.display = 'block';
   } else {
-    if (!item || !item.images[avatar.gender]) avatar.equipped.outfit = 'outfit_basic';
+    if (!item || !item.images[avatar.gender]) eq.outfit = 'outfit_basic';
     outfitImg.src = '';
     outfitImg.style.display = 'none';
   }
 
   // 머리 레이어 (옷 위에 그림). 착용한 머리가 이 성별 이미지를 안 가지면 성별 기본 머리로 되돌림.
   const hairImg = document.getElementById('avatarHairImg');
-  let hs = HAIRSTYLES.find(h => h.id === avatar.equipped.hair);
+  let hs = HAIRSTYLES.find(h => h.id === eq.hair);
   if (!hs || !hs.images[avatar.gender]) {
-    avatar.equipped.hair = defaultHairId(avatar.gender);
-    hs = HAIRSTYLES.find(h => h.id === avatar.equipped.hair);
+    eq.hair = defaultHairId(avatar.gender);
+    hs = HAIRSTYLES.find(h => h.id === eq.hair);
   }
   if (hs && hs.images[avatar.gender]) {
     hairImg.src = hs.images[avatar.gender];
@@ -134,7 +144,7 @@ function renderAvatar() {
     hairImg.style.display = 'none';
   }
 
-  const fr = FRAMES.find(f => f.id === avatar.equipped.frame);
+  const fr = FRAMES.find(f => f.id === eq.frame);
   const corners = ['frameTL', 'frameTR', 'frameBL', 'frameBR'].map(id => document.getElementById(id));
   corners.forEach(el => {
     if (fr && fr.image) {
@@ -156,7 +166,7 @@ function renderAvatar() {
     stage.style.borderStyle = 'none';
   }
 
-  const title = resolveTitle(avatar);
+  const title = resolveTitle({ equipped: eq });
   const titlePreview = document.getElementById('titlePreview');
   if (title) {
     document.getElementById('titleIcon').src = title.image;
@@ -216,7 +226,11 @@ function renderItemGrid() {
     const owned = avatar.inventory.includes(item.id);
     const isEquipped = equippedId === item.id;
     const card = document.createElement('div');
-    card.className = 'item-card' + (isEquipped ? ' equipped' : '');
+    const previewing = currentTab === 'shop' && previewId === item.id;
+    card.className = 'item-card' + (isEquipped ? ' equipped' : '') + (previewing ? ' previewing' : '');
+    card.dataset.id = item.id;
+    // 상점에서 아직 안 산 아이템은 카드를 누르면 아바타에 미리 입혀본다.
+    if (currentTab === 'shop' && !owned) card.classList.add('previewable');
 
     let actionHtml = '';
     if (currentTab === 'shop') {
@@ -243,11 +257,25 @@ function renderItemGrid() {
   });
 
   grid.querySelectorAll('[data-action="buy"]').forEach(btn => {
-    btn.addEventListener('click', () => buyItem(btn.dataset.id));
+    btn.addEventListener('click', (e) => { e.stopPropagation(); buyItem(btn.dataset.id); });
   });
   grid.querySelectorAll('[data-action="equip"]').forEach(btn => {
-    btn.addEventListener('click', () => equipItem(btn.dataset.id));
+    btn.addEventListener('click', (e) => { e.stopPropagation(); equipItem(btn.dataset.id); });
   });
+  grid.querySelectorAll('.item-card.previewable').forEach(card => {
+    card.addEventListener('click', () => togglePreview(card.dataset.id));
+  });
+}
+
+// 미리보기 켜기/끄기 (같은 아이템을 다시 누르면 해제)
+function togglePreview(id) {
+  previewId = (previewId === id) ? null : id;
+  render();
+  bounceAvatar();
+}
+
+function clearPreview() {
+  if (previewId) previewId = null;
 }
 
 function buyItem(id) {
@@ -264,6 +292,8 @@ function buyItem(id) {
   if (!state.spent) state.spent = {};
   state.spent[studentIdx] = (state.spent[studentIdx] || 0) + item.price;
   avatar.inventory.push(id);
+  equipSlot(avatar, id); // 미리보던 아이템을 사면 바로 입은 상태로 유지
+  clearPreview();
   saveAvatarState();
   flashHeart();
   document.getElementById('heartCount').textContent = availableCoins(studentIdx);
@@ -271,20 +301,20 @@ function buyItem(id) {
   render();
 }
 
+// 카테고리에 맞는 착용 슬롯에 아이템 적용
+function equipSlot(avatar, id) {
+  if (BACKGROUNDS.some(b => b.id === id)) avatar.equipped.background = id;
+  else if (FRAMES.some(f => f.id === id)) avatar.equipped.frame = id;
+  else if (TITLES.some(t => t.id === id)) avatar.equipped.title = id;
+  else if (HAIRSTYLES.some(h => h.id === id)) avatar.equipped.hair = id;
+  else avatar.equipped.outfit = id;
+}
+
 function equipItem(id) {
   const item = findCatalogItem(id);
   const avatar = state.avatars[studentIdx];
-  if (BACKGROUNDS.some(b => b.id === id)) {
-    avatar.equipped.background = id;
-  } else if (FRAMES.some(f => f.id === id)) {
-    avatar.equipped.frame = id;
-  } else if (TITLES.some(t => t.id === id)) {
-    avatar.equipped.title = id;
-  } else if (HAIRSTYLES.some(h => h.id === id)) {
-    avatar.equipped.hair = id;
-  } else {
-    avatar.equipped.outfit = id;
-  }
+  equipSlot(avatar, id);
+  clearPreview();
   saveAvatarState();
   bounceAvatar();
   showToast(`✨ ${item.name} 적용!`);
@@ -305,15 +335,17 @@ document.getElementById('backBtn2').addEventListener('click', () => location.hre
 document.querySelectorAll('.cat-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     currentCategory = btn.dataset.cat;
+    clearPreview();
     document.querySelectorAll('.cat-tab').forEach(b => b.classList.toggle('active', b === btn));
-    renderItemGrid();
+    render();
   });
 });
 document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     currentTab = btn.dataset.tab;
+    clearPreview();
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b === btn));
-    renderItemGrid();
+    render();
   });
 });
 

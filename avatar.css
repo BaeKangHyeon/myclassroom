@@ -123,6 +123,25 @@
     border-radius: 12px;
     overflow: hidden;
   }
+  #previewBadge {
+    position: absolute;
+    top: 6px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    background: #2AA8F0;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+    padding: 3px 12px;
+    border-radius: 999px;
+    box-shadow: 0 2px 0 #1A7CB8;
+    white-space: nowrap;
+    animation: previewPulse 1.3s ease-in-out infinite;
+  }
+  @keyframes previewPulse {
+    0%, 100% { opacity: 0.85; }
+    50% { opacity: 1; }
+  }
   #avatarStage.bounce { animation: avatarBounce 0.45s ease; }
   @keyframes avatarBounce {
     0%, 100% { transform: translateY(0) scaleY(1); }
@@ -226,6 +245,12 @@
     text-align: center;
   }
   .item-card.equipped { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold) inset; }
+  .item-card.previewable { cursor: pointer; }
+  .item-card.previewable:hover { border-color: #5BC8FF; transform: translateY(-2px); }
+  .item-card.previewing {
+    border-color: #2AA8F0;
+    box-shadow: 0 0 0 3px #5BC8FF inset, 0 0 10px rgba(91,200,255,0.6);
+  }
   .item-icon {
     width: 72px;
     height: 72px;
