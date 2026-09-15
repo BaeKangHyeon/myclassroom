@@ -257,6 +257,12 @@
     position: relative;
   }
   .item-icon img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
+  .item-icon .skin-swatch {
+    position: absolute; top: 8px; left: 8px;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.25);
+    box-shadow: inset 0 -6px 10px rgba(0,0,0,0.12);
+  }
   .item-name {
     font-size: 12px;
     font-weight: 700;

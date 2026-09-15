@@ -56,10 +56,12 @@ function ensureAvatarShape(avatar) {
   if (!avatar.equipped.background) avatar.equipped.background = 'bg_none';
   if (!avatar.equipped.frame) avatar.equipped.frame = 'frame_none';
   if (!avatar.equipped.title) avatar.equipped.title = 'title_none';
+  if (!avatar.inventory.includes('skin_default')) avatar.inventory.push('skin_default');
+  if (!avatar.equipped.skin) avatar.equipped.skin = 'skin_default';
 }
 
 function findCatalogItem(id) {
-  return ITEMS.find(i => i.id === id) || HAIRSTYLES.find(h => h.id === id) || BACKGROUNDS.find(b => b.id === id) || FRAMES.find(f => f.id === id) || TITLES.find(t => t.id === id);
+  return ITEMS.find(i => i.id === id) || HAIRSTYLES.find(h => h.id === id) || BACKGROUNDS.find(b => b.id === id) || FRAMES.find(f => f.id === id) || TITLES.find(t => t.id === id) || SKINS.find(s => s.id === id);
 }
 
 function init() {
@@ -104,7 +106,7 @@ function renderAvatar() {
   const baseImg = document.getElementById('avatarBaseImg');
   const outfitImg = document.getElementById('avatarOutfitImg');
   const bgImg = document.getElementById('avatarBgImg');
-  baseImg.src = GENDER_IMAGES[avatar.gender];
+  recolorSkin(avatar.gender, eq.skin, url => { baseImg.src = url; }); // 피부색 적용(기본색이면 원본)
 
   document.getElementById('previewBadge').style.display =
     (previewId && currentTab === 'shop') ? 'block' : 'none';
@@ -137,7 +139,7 @@ function renderAvatar() {
     hs = HAIRSTYLES.find(h => h.id === eq.hair);
   }
   if (hs && hs.images[avatar.gender]) {
-    hairImg.src = hs.images[avatar.gender];
+    recolorHairForSkin(hs.images[avatar.gender], eq.skin, url => { hairImg.src = url; }); // 앞머리 매트도 피부색에 맞춤
     hairImg.style.display = 'block';
   } else {
     hairImg.src = '';
@@ -199,10 +201,12 @@ function renderItemGrid() {
   const catalog = currentCategory === 'background' ? BACKGROUNDS
     : currentCategory === 'frame' ? FRAMES
     : currentCategory === 'title' ? TITLES
+    : currentCategory === 'skin' ? skinList()
     : currentCategory === 'hair' ? hairForGender(avatar.gender)
     : itemsForGender(avatar.gender);
   const emptyMsg = currentCategory === 'background' ? '아직 보유한 배경이 없어요. 상점에서 구매해보세요!'
     : currentCategory === 'frame' ? '아직 보유한 테두리가 없어요. 상점에서 구매해보세요!'
+    : currentCategory === 'skin' ? '아직 보유한 피부색이 없어요.'
     : currentCategory === 'title' ? '아직 보유한 칭호가 없어요. 상점에서 구매해보세요!'
     : currentCategory === 'hair' ? (currentTab === 'shop' ? '아직 준비된 머리 스타일이 없어요.' : '아직 보유한 머리 스타일이 없어요. 상점에서 구매해보세요!')
     : '아직 보유한 옷이 없어요. 상점에서 구매해보세요!';
@@ -248,9 +252,15 @@ function renderItemGrid() {
         : `<button class="btn" data-action="equip" data-id="${item.id}">장착</button>`;
     }
 
-    const iconSrc = (currentCategory === 'outfit' || currentCategory === 'hair') ? item.images[avatar.gender] : item.image;
+    let iconInner;
+    if (currentCategory === 'skin') {
+      iconInner = `<span class="skin-swatch" style="background:${item.swatch}"></span>`;
+    } else {
+      const iconSrc = (currentCategory === 'outfit' || currentCategory === 'hair') ? item.images[avatar.gender] : item.image;
+      iconInner = iconSrc ? `<img src="${iconSrc}" alt="">` : '';
+    }
     card.innerHTML = `
-      <div class="item-icon">${iconSrc ? `<img src="${iconSrc}" alt="">` : ''}</div>
+      <div class="item-icon">${iconInner}</div>
       <div class="item-name">${item.name}</div>
       ${actionHtml}`;
     grid.appendChild(card);
@@ -307,6 +317,7 @@ function equipSlot(avatar, id) {
   else if (FRAMES.some(f => f.id === id)) avatar.equipped.frame = id;
   else if (TITLES.some(t => t.id === id)) avatar.equipped.title = id;
   else if (HAIRSTYLES.some(h => h.id === id)) avatar.equipped.hair = id;
+  else if (SKINS.some(s => s.id === id)) avatar.equipped.skin = id;
   else avatar.equipped.outfit = id;
 }
 

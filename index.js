@@ -165,6 +165,7 @@ function render() {
           </div>
         </div>`;
       applyDeskFrame(desk, studentIdx);
+      applyDeskSkin(desk, studentIdx);
       grid.appendChild(desk);
     });
 
@@ -274,10 +275,10 @@ function deskAvatarHtml(studentIdx) {
   }
   const bgImg = layers.background ? `<img class="desk-bg" src="${layers.background}" alt="">` : '';
   const overlayImg = layers.overlay ? `<img src="${layers.overlay}" alt="">` : '';
-  const hairImg = layers.hair ? `<img src="${layers.hair}" alt="">` : '';
+  const hairImg = layers.hair ? `<img class="desk-hair" src="${layers.hair}" alt="">` : '';
   return `<div class="desk-avatar" data-idx="${studentIdx}" title="내 아바타 꾸미기">
     ${bgImg}
-    <img src="${layers.base}" alt="">
+    <img class="desk-base" src="${layers.base}" alt="">
     ${overlayImg}
     ${hairImg}
   </div>`;
@@ -307,6 +308,18 @@ function applyDeskFrame(desk, studentIdx) {
     desk.style.borderWidth = '3px';
     desk.style.borderColor = fr.color;
   }
+}
+
+// 자리표 아바타의 피부색 적용 (기본색이 아니면 base 이미지를 재색칠해 교체)
+function applyDeskSkin(desk, studentIdx) {
+  const avatar = state.avatars[studentIdx];
+  if (!avatar || !avatar.gender) return;
+  const tone = (avatar.equipped && avatar.equipped.skin) || 'skin_default';
+  if (tone === 'skin_default') return;
+  const baseImg = desk.querySelector('.desk-base');
+  if (baseImg) recolorSkin(avatar.gender, tone, url => { baseImg.src = url; });
+  const hairImg = desk.querySelector('.desk-hair');
+  if (hairImg) recolorHairForSkin(hairImg.getAttribute('src'), tone, url => { hairImg.src = url; });
 }
 
 function goToAvatar(idx) {

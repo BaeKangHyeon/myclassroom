@@ -114,14 +114,94 @@ const TITLES = [
   { id: 'title_9', name: '자수정 왕관', price: 50, image: 'assets/medal_9.png' },
 ];
 
+// 피부색: 기본 body가 '기본색깔'. 나머지는 상점에서 40원에 구매.
+// 렌더 시 body의 피부 픽셀(마스크)만 아래 배율로 곱해 실시간 염색한다(옷·눈·머리 불변).
+// swatch는 상점 카드에 보여줄 대표 색.
+const SKINS = [
+  { id: 'skin_vdark',   name: '아주 어두움',   price: 40, mult: [0.52, 0.42, 0.37], swatch: '#7F5A4A' },
+  { id: 'skin_dark',    name: '어두움',        price: 40, mult: [0.66, 0.56, 0.49], swatch: '#A27862' },
+  { id: 'skin_mdark',   name: '적당히 어두움', price: 40, mult: [0.82, 0.74, 0.68], swatch: '#C99F88' },
+  { id: 'skin_default', name: '기본색깔',      price: 0,  mult: [1.00, 1.00, 1.00], swatch: '#F5D7C8' },
+  { id: 'skin_light',   name: '조금 밝음',     price: 40, mult: [1.06, 1.05, 1.05], swatch: '#FFE4D2' },
+  { id: 'skin_vlight',  name: '밝음',          price: 40, mult: [1.12, 1.12, 1.13], swatch: '#FFF1E2' },
+  { id: 'skin_pale',    name: '아주 밝음',     price: 40, mult: [1.18, 1.19, 1.22], swatch: '#FFF8F4' },
+];
+function skinList() { return SKINS; }
+function skinMult(id) { const s = SKINS.find(x => x.id === id); return s ? s.mult : [1, 1, 1]; }
+
+// 재색칠 결과 캐시 (gender|toneId -> dataURL) / 로드된 원본·마스크 이미지 캐시
+const _skinCache = {};
+const _skinImgCache = {};
+function _loadImg(src, cb) {
+  let im = _skinImgCache[src];
+  if (im && im.complete && im.naturalWidth) { cb(im); return; }
+  if (!im) { im = new Image(); _skinImgCache[src] = im; im.onload = () => { (im._cbs || []).forEach(f => f(im)); im._cbs = []; }; im._cbs = []; im.src = src; }
+  im._cbs = im._cbs || [];
+  if (im.complete && im.naturalWidth) cb(im); else im._cbs.push(cb);
+}
+// gender/toneId에 맞는 body 이미지 소스를 콜백으로 준다. 기본색이면 원본 그대로(즉시).
+function recolorSkin(gender, toneId, cb) {
+  const baseSrc = GENDER_IMAGES[gender];
+  if (!toneId || toneId === 'skin_default') { cb(baseSrc); return; }
+  const key = gender + '|' + toneId;
+  if (_skinCache[key]) { cb(_skinCache[key]); return; }
+  _loadImg(baseSrc, base => _loadImg('assets/body_' + gender + '_skinmask.png', mask => {
+    const w = base.naturalWidth, h = base.naturalHeight;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.drawImage(base, 0, 0);
+    const bd = ctx.getImageData(0, 0, w, h); const p = bd.data;
+    const mc = document.createElement('canvas'); mc.width = w; mc.height = h;
+    const mx = mc.getContext('2d'); mx.drawImage(mask, 0, 0);
+    const md = mx.getImageData(0, 0, w, h).data;
+    const m = skinMult(toneId);
+    for (let i = 0; i < p.length; i += 4) {
+      if (md[i + 3] > 128) { // 마스크의 피부 픽셀만
+        p[i]     = Math.min(255, p[i]     * m[0]);
+        p[i + 1] = Math.min(255, p[i + 1] * m[1]);
+        p[i + 2] = Math.min(255, p[i + 2] * m[2]);
+      }
+    }
+    ctx.putImageData(bd, 0, 0);
+    const url = c.toDataURL();
+    _skinCache[key] = url;
+    cb(url);
+  }));
+}
+
+// 머리 overlay에는 '밝은 피부색'으로 안티앨리어싱된 앞머리 매트 픽셀이 있다.
+// 피부를 어둡게 바꾸면 이 매트가 밝게 남아 이마 경계가 이상해지므로,
+// 머리 overlay 안의 '밝은 살구색' 픽셀만 같은 배율로 염색한다(진짜 머리색은 R>=205 조건으로 보존).
+const _hairSkinCache = {};
+function recolorHairForSkin(hairSrc, toneId, cb) {
+  if (!toneId || toneId === 'skin_default' || !hairSrc) { cb(hairSrc); return; }
+  const key = hairSrc + '|' + toneId;
+  if (_hairSkinCache[key]) { cb(_hairSkinCache[key]); return; }
+  _loadImg(hairSrc, img => {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, w, h); const p = d.data; const m = skinMult(toneId);
+    for (let i = 0; i < p.length; i += 4) {
+      const r = p[i], g = p[i + 1], b = p[i + 2], a = p[i + 3];
+      if (a > 16 && r > g && g > b && r >= 205 && g >= 170 && b >= 150 && (r - b) <= 75) {
+        p[i]     = Math.min(255, r * m[0]);
+        p[i + 1] = Math.min(255, g * m[1]);
+        p[i + 2] = Math.min(255, b * m[2]);
+      }
+    }
+    ctx.putImageData(d, 0, 0);
+    const url = c.toDataURL(); _hairSkinCache[key] = url; cb(url);
+  });
+}
+
 function defaultAvatar(gender) {
   const hair = defaultHairId(gender);
-  const inv = ['outfit_basic', 'bg_none', 'frame_none', 'title_none'];
+  const inv = ['outfit_basic', 'bg_none', 'frame_none', 'title_none', 'skin_default'];
   if (hair) inv.push(hair);
   return {
     gender: gender || null,
     inventory: inv,
-    equipped: { outfit: 'outfit_basic', hair: hair, background: 'bg_none', frame: 'frame_none', title: 'title_none' }
+    equipped: { outfit: 'outfit_basic', hair: hair, background: 'bg_none', frame: 'frame_none', title: 'title_none', skin: 'skin_default' }
   };
 }
 
@@ -143,7 +223,8 @@ function resolveAvatarLayers(avatar) {
   const background = bg ? bg.image : null;
   const fr = FRAMES.find(f => f.id === (avatar.equipped && avatar.equipped.frame));
   const frame = fr ? fr.image : null;
-  return { base, overlay, hair, background, frame };
+  const skin = (avatar.equipped && avatar.equipped.skin) || 'skin_default';
+  return { base, overlay, hair, background, frame, skin, gender: avatar.gender };
 }
 
 // resolve equipped title: { image, name } or null
