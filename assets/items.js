@@ -87,6 +87,10 @@ const BACKGROUNDS = [
   { id: 'bg_1', name: '배경 1', price: 15, image: 'assets/배경1.png' },
   { id: 'bg_2', name: '배경 2', price: 15, image: 'assets/배경2.png' },
   { id: 'bg_3', name: '배경 3', price: 15, image: 'assets/배경3.png' },
+  { id: 'bg_4', name: '배경 4', price: 20, image: 'assets/배경4.png' },
+  { id: 'bg_5', name: '배경 5', price: 20, image: 'assets/배경5.png' },
+  { id: 'bg_6', name: '배경 6', price: 20, image: 'assets/배경6.png' },
+  { id: 'bg_7', name: '배경 7', price: 20, image: 'assets/배경7.png' },
 ];
 
 // 테두리: 학생 카드 네 모서리에 장식 뱃지(이미지) + 변은 등급 색상의 얇은 선으로 연결.
