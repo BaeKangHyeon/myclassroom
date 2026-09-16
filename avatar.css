@@ -157,6 +157,22 @@
     object-fit: contain;
   }
   #avatarBgImg { z-index: 0; object-fit: cover; }
+  /* 펫: 캐릭터 발치 왼쪽에 작게 + 바닥 그림자로 "앞에 서 있는" 느낌 */
+  #avatarPet {
+    position: absolute;
+    left: 3%; bottom: 7%;
+    width: 36%;
+    z-index: 4;
+  }
+  #avatarPet img { width: 100%; display: block; position: relative; z-index: 1; }
+  #avatarPet .pet-shadow {
+    position: absolute;
+    left: 13%; bottom: -2%;
+    width: 74%; height: 11%;
+    background: rgba(60,35,15,0.28);
+    border-radius: 50%;
+    z-index: 0;
+  }
   #avatarBaseImg { z-index: 1; }
   #avatarHairImg { z-index: 3; }
   .frame-corner {
@@ -209,9 +225,11 @@
   .gender-card img { width: 160px; height: 160px; object-fit: contain; }
   .gender-card span { font-weight: 900; color: var(--card-border); font-size: 14px; }
 
-  .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  /* 카테고리가 늘어나면 자동으로 다음 줄로 넘어간다 */
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
   .tab-btn {
-    flex: 1;
+    flex: 1 1 88px;
+    min-width: 88px;
     padding: 10px;
     border-radius: 8px;
     border: 2px solid var(--card-border);

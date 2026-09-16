@@ -58,10 +58,12 @@ function ensureAvatarShape(avatar) {
   if (!avatar.equipped.title) avatar.equipped.title = 'title_none';
   if (!avatar.inventory.includes('skin_default')) avatar.inventory.push('skin_default');
   if (!avatar.equipped.skin) avatar.equipped.skin = 'skin_default';
+  if (!avatar.inventory.includes('pet_none')) avatar.inventory.push('pet_none');
+  if (!avatar.equipped.pet) avatar.equipped.pet = 'pet_none';
 }
 
 function findCatalogItem(id) {
-  return ITEMS.find(i => i.id === id) || HAIRSTYLES.find(h => h.id === id) || BACKGROUNDS.find(b => b.id === id) || FRAMES.find(f => f.id === id) || TITLES.find(t => t.id === id) || SKINS.find(s => s.id === id);
+  return ITEMS.find(i => i.id === id) || HAIRSTYLES.find(h => h.id === id) || BACKGROUNDS.find(b => b.id === id) || FRAMES.find(f => f.id === id) || TITLES.find(t => t.id === id) || SKINS.find(s => s.id === id) || PETS.find(p => p.id === id);
 }
 
 function init() {
@@ -146,6 +148,16 @@ function renderAvatar() {
     hairImg.style.display = 'none';
   }
 
+  // 펫 레이어 (발치 옆, 그림자 포함). 몸에 안 겹치는 별도 위치라 정렬 불필요.
+  const petBox = document.getElementById('avatarPet');
+  const petItem = PETS.find(p => p.id === eq.pet);
+  if (petItem && petItem.image) {
+    document.getElementById('avatarPetImg').src = petItem.image;
+    petBox.style.display = 'block';
+  } else {
+    petBox.style.display = 'none';
+  }
+
   const fr = FRAMES.find(f => f.id === eq.frame);
   const corners = ['frameTL', 'frameTR', 'frameBL', 'frameBR'].map(id => document.getElementById(id));
   corners.forEach(el => {
@@ -202,11 +214,13 @@ function renderItemGrid() {
     : currentCategory === 'frame' ? FRAMES
     : currentCategory === 'title' ? TITLES
     : currentCategory === 'skin' ? skinList()
+    : currentCategory === 'pet' ? PETS
     : currentCategory === 'hair' ? hairForGender(avatar.gender)
     : itemsForGender(avatar.gender);
   const emptyMsg = currentCategory === 'background' ? '아직 보유한 배경이 없어요. 상점에서 구매해보세요!'
     : currentCategory === 'frame' ? '아직 보유한 테두리가 없어요. 상점에서 구매해보세요!'
     : currentCategory === 'skin' ? '아직 보유한 피부색이 없어요.'
+    : currentCategory === 'pet' ? '아직 보유한 펫이 없어요. 상점에서 구매해보세요!'
     : currentCategory === 'title' ? '아직 보유한 칭호가 없어요. 상점에서 구매해보세요!'
     : currentCategory === 'hair' ? (currentTab === 'shop' ? '아직 준비된 머리 스타일이 없어요.' : '아직 보유한 머리 스타일이 없어요. 상점에서 구매해보세요!')
     : '아직 보유한 옷이 없어요. 상점에서 구매해보세요!';
@@ -318,6 +332,7 @@ function equipSlot(avatar, id) {
   else if (TITLES.some(t => t.id === id)) avatar.equipped.title = id;
   else if (HAIRSTYLES.some(h => h.id === id)) avatar.equipped.hair = id;
   else if (SKINS.some(s => s.id === id)) avatar.equipped.skin = id;
+  else if (PETS.some(p => p.id === id)) avatar.equipped.pet = id;
   else avatar.equipped.outfit = id;
 }
 

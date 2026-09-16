@@ -93,6 +93,15 @@ const BACKGROUNDS = [
   { id: 'bg_7', name: '배경 7', price: 20, image: 'assets/배경7.png' },
 ];
 
+// 펫: 캐릭터 발치 옆에 서 있는 작은 친구. 몸에 겹치지 않는 별도 레이어라 정렬 신경 안 써도 된다.
+const PETS = [
+  { id: 'pet_none', name: '펫 없음', price: 0, image: null },
+  { id: 'pet_1', name: '하츄핑', price: 25, image: 'assets/pet1.png' },
+  { id: 'pet_2', name: '뚜벅초', price: 25, image: 'assets/pet2.png' },
+  { id: 'pet_3', name: '토게피', price: 25, image: 'assets/pet3.png' },
+  { id: 'pet_4', name: '이브이', price: 25, image: 'assets/pet4.png' },
+];
+
 // 테두리: 학생 카드 네 모서리에 장식 뱃지(이미지) + 변은 등급 색상의 얇은 선으로 연결.
 // (원본 테두리 전체를 border-image로 늘리면 디테일이 뭉개지고 상단 중앙 장식이 어긋나서 모서리만 잘라 쓰고, 변은 이미지 대신 색선으로 대체. 원본은 frame_*.png, 모서리만 자른 건 frame_*_corner.png)
 const FRAMES = [
@@ -203,12 +212,12 @@ function recolorHairForSkin(hairSrc, toneId, cb) {
 
 function defaultAvatar(gender) {
   const hair = defaultHairId(gender);
-  const inv = ['outfit_basic', 'bg_none', 'frame_none', 'title_none', 'skin_default'];
+  const inv = ['outfit_basic', 'bg_none', 'frame_none', 'title_none', 'skin_default', 'pet_none'];
   if (hair) inv.push(hair);
   return {
     gender: gender || null,
     inventory: inv,
-    equipped: { outfit: 'outfit_basic', hair: hair, background: 'bg_none', frame: 'frame_none', title: 'title_none', skin: 'skin_default' }
+    equipped: { outfit: 'outfit_basic', hair: hair, background: 'bg_none', frame: 'frame_none', title: 'title_none', skin: 'skin_default', pet: 'pet_none' }
   };
 }
 
@@ -231,7 +240,9 @@ function resolveAvatarLayers(avatar) {
   const fr = FRAMES.find(f => f.id === (avatar.equipped && avatar.equipped.frame));
   const frame = fr ? fr.image : null;
   const skin = (avatar.equipped && avatar.equipped.skin) || 'skin_default';
-  return { base, overlay, hair, background, frame, skin, gender: avatar.gender };
+  const pt = PETS.find(p => p.id === (avatar.equipped && avatar.equipped.pet));
+  const pet = pt ? pt.image : null;
+  return { base, overlay, hair, background, frame, skin, pet, gender: avatar.gender };
 }
 
 // resolve equipped title: { image, name } or null
