@@ -276,11 +276,13 @@ function deskAvatarHtml(studentIdx) {
   const bgImg = layers.background ? `<img class="desk-bg" src="${layers.background}" alt="">` : '';
   const overlayImg = layers.overlay ? `<img src="${layers.overlay}" alt="">` : '';
   const hairImg = layers.hair ? `<img class="desk-hair" src="${layers.hair}" alt="">` : '';
+  const petImg = layers.pet ? `<img class="desk-pet" src="${layers.pet}" alt="">` : '';
   return `<div class="desk-avatar" data-idx="${studentIdx}" title="내 아바타 꾸미기">
     ${bgImg}
     <img class="desk-base" src="${layers.base}" alt="">
     ${overlayImg}
     ${hairImg}
+    ${petImg}
   </div>`;
 }
 
