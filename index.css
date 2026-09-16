@@ -234,7 +234,7 @@
   .desk-avatar img.desk-bg { object-fit: cover; z-index: 0; }
   /* 펫: 자리표 카드에서도 발치 왼쪽에 작게 */
   .desk-avatar img.desk-pet {
-    top: auto; left: 3%;
+    top: auto; left: auto; right: 3%;
     bottom: 5%;
     width: 36%; height: 36%;
     object-fit: contain;

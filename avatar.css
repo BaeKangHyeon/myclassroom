@@ -160,7 +160,7 @@
   /* 펫: 캐릭터 발치 왼쪽에 작게 + 바닥 그림자로 "앞에 서 있는" 느낌 */
   #avatarPet {
     position: absolute;
-    left: 3%; bottom: 7%;
+    right: 3%; bottom: 7%;
     width: 36%;
     z-index: 4;
   }
