@@ -61,7 +61,7 @@ const HAIRSTYLES = [
     images: { girl: 'assets/hair_bob_topbun_girl.png' } },
   { id: 'hair_wave_bow', name: '리본 웨이브', price: 10,
     images: { girl: 'assets/hair_wave_bow_girl.png' } },
-  { id: 'hair_basic', name: '분홍 웨이브', price: 10,
+  { id: 'hair_basic', name: '분홍 웨이브', price: 10, noSkinTint: true,
     images: { girl: 'assets/hair_basic_girl.png' } },
   { id: 'hair_spike', name: '스파이크 컷', price: 10,
     images: { boy: 'assets/hair_spike_boy.png' } },
@@ -178,6 +178,9 @@ function recolorSkin(gender, toneId, cb) {
 const _hairSkinCache = {};
 function recolorHairForSkin(hairSrc, toneId, cb) {
   if (!toneId || toneId === 'skin_default' || !hairSrc) { cb(hairSrc); return; }
+  // 연분홍·금발 등 '머리색 자체가 살색과 비슷한' 머리는 매트 염색을 끈다(머리색까지 바뀌는 버그 방지).
+  const owner = HAIRSTYLES.find(h => h.images && (h.images.boy === hairSrc || h.images.girl === hairSrc));
+  if (owner && owner.noSkinTint) { cb(hairSrc); return; }
   const key = hairSrc + '|' + toneId;
   if (_hairSkinCache[key]) { cb(_hairSkinCache[key]); return; }
   _loadImg(hairSrc, img => {
